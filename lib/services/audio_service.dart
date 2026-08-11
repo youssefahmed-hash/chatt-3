@@ -18,36 +18,49 @@ class AudioService {
 
   bool get isPaused => _isPaused;
 
-  bool get isRecording => _recorder.isRecording;
+  // ============================================================
+  // IS RECORDING
+  // ============================================================
+
+  Future<bool> get isRecording async {
+    return await _recorder.isRecording();
+  }
 
   // ============================================================
   // START
   // ============================================================
 
   Future<String?> startRecording() async {
-    if (!await _recorder.hasPermission()) {
+    try {
+      final hasPermission = await _recorder.hasPermission();
+
+      if (!hasPermission) {
+        return null;
+      }
+
+      String path = '';
+
+      if (!kIsWeb) {
+        final dir = await getTemporaryDirectory();
+
+        path =
+        '${dir.path}/${DateTime.now().millisecondsSinceEpoch}.m4a';
+      }
+
+      await _recorder.start(
+        const RecordConfig(),
+        path: path,
+      );
+
+      _isPaused = false;
+
+      _startAmplitudeListener();
+
+      return path;
+    } catch (e) {
+      debugPrint('AudioService START ERROR: $e');
       return null;
     }
-
-    String path = '';
-
-    if (!kIsWeb) {
-      final dir = await getTemporaryDirectory();
-
-      path =
-      '${dir.path}/${DateTime.now().millisecondsSinceEpoch}.m4a';
-    }
-
-    await _recorder.start(
-      const RecordConfig(),
-      path: path,
-    );
-
-    _isPaused = false;
-
-    _startAmplitudeListener();
-
-    return path;
   }
 
   // ============================================================
@@ -61,21 +74,31 @@ class AudioService {
         .onAmplitudeChanged(
       const Duration(milliseconds: 80),
     )
-        .listen((amplitude) {
-      if (_isPaused) {
-        return;
-      }
+        .listen(
+          (amplitude) {
+        if (_isPaused) {
+          return;
+        }
 
-      final current = amplitude.current;
+        final current = amplitude.current;
 
-      double normalized = (current + 60.0) / 60.0;
+        // dBFS:
+        // -60 = صوت هادي جدًا
+        // 0   = صوت عالي جدًا
+        double normalized = (current + 60.0) / 60.0;
 
-      normalized = normalized.clamp(0.0, 1.0);
+        normalized = normalized.clamp(0.0, 1.0);
 
-      if (!_waveformController.isClosed) {
-        _waveformController.add(normalized);
-      }
-    });
+        if (!_waveformController.isClosed) {
+          _waveformController.add(normalized);
+        }
+      },
+      onError: (error) {
+        debugPrint(
+          'AudioService AMPLITUDE ERROR: $error',
+        );
+      },
+    );
   }
 
   // ============================================================
@@ -83,17 +106,29 @@ class AudioService {
   // ============================================================
 
   Future<void> pauseRecording() async {
-    if (!_recorder.isRecording) {
-      return;
+    try {
+      final recording = await _recorder.isRecording();
+
+      if (!recording) {
+        return;
+      }
+
+      final paused = await _recorder.isPaused();
+
+      if (paused) {
+        return;
+      }
+
+      await _recorder.pause();
+
+      _isPaused = true;
+
+      debugPrint('RECORDING PAUSED');
+    } catch (e) {
+      debugPrint(
+        'AudioService PAUSE ERROR: $e',
+      );
     }
-
-    if (_recorder.isPaused) {
-      return;
-    }
-
-    await _recorder.pause();
-
-    _isPaused = true;
   }
 
   // ============================================================
@@ -101,13 +136,23 @@ class AudioService {
   // ============================================================
 
   Future<void> resumeRecording() async {
-    if (!_recorder.isPaused) {
-      return;
+    try {
+      final paused = await _recorder.isPaused();
+
+      if (!paused) {
+        return;
+      }
+
+      await _recorder.resume();
+
+      _isPaused = false;
+
+      debugPrint('RECORDING RESUMED');
+    } catch (e) {
+      debugPrint(
+        'AudioService RESUME ERROR: $e',
+      );
     }
-
-    await _recorder.resume();
-
-    _isPaused = false;
   }
 
   // ============================================================
@@ -115,13 +160,27 @@ class AudioService {
   // ============================================================
 
   Future<String?> stopRecording() async {
-    await _amplitudeSubscription?.cancel();
+    try {
+      await _amplitudeSubscription?.cancel();
 
-    _amplitudeSubscription = null;
+      _amplitudeSubscription = null;
 
-    _isPaused = false;
+      _isPaused = false;
 
-    return await _recorder.stop();
+      final path = await _recorder.stop();
+
+      debugPrint(
+        'RECORDING STOPPED: $path',
+      );
+
+      return path;
+    } catch (e) {
+      debugPrint(
+        'AudioService STOP ERROR: $e',
+      );
+
+      return null;
+    }
   }
 
   // ============================================================
@@ -129,16 +188,24 @@ class AudioService {
   // ============================================================
 
   Future<void> cancelRecording() async {
-    await _amplitudeSubscription?.cancel();
+    try {
+      await _amplitudeSubscription?.cancel();
 
-    _amplitudeSubscription = null;
+      _amplitudeSubscription = null;
 
-    _isPaused = false;
+      _isPaused = false;
 
-    await _recorder.cancel();
+      await _recorder.cancel();
 
-    if (!_waveformController.isClosed) {
-      _waveformController.add(0.0);
+      if (!_waveformController.isClosed) {
+        _waveformController.add(0.0);
+      }
+
+      debugPrint('RECORDING CANCELLED');
+    } catch (e) {
+      debugPrint(
+        'AudioService CANCEL ERROR: $e',
+      );
     }
   }
 
@@ -151,7 +218,9 @@ class AudioService {
 
     _amplitudeSubscription = null;
 
-    _waveformController.close();
+    if (!_waveformController.isClosed) {
+      _waveformController.close();
+    }
 
     _recorder.dispose();
   }
