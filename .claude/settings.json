@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node src/server.js)",
+      "Read(//tmp/**)",
+      "Bash(curl -s http://localhost:4000/health)"
+    ]
+  }
+}
