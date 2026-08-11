@@ -858,7 +858,7 @@ class _MessageInputState
           if (showMicButton)
             Positioned(
               right: 4,
-              bottom: 7.9,
+              bottom: 9.9,
 
               child: MicButton(
                 isRecording:
