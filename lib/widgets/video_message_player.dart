@@ -146,15 +146,24 @@ class _VideoMessagePlayerState extends State<VideoMessagePlayer> {
                 child: VideoPlayer(controller),
               ),
             ),
-            Center(
+            Positioned(
+              left: 6,
+              bottom: 4,
               child: GestureDetector(
-                // The play/pause control keeps the existing inline playback
-                // logic; taps elsewhere on the video open the fullscreen view.
+                // Small inline play/pause control so tapping the rest of the
+                // video still opens the fullscreen view.
                 onTap: _togglePlay,
-                child: Icon(
-                  playing ? Icons.pause_circle_filled : Icons.play_circle_fill,
-                  size: 52,
-                  color: Colors.white.withValues(alpha: 0.9),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
+                  ),
+                  padding: const EdgeInsets.all(2),
+                  child: Icon(
+                    playing ? Icons.pause_circle_filled : Icons.play_circle_fill,
+                    size: 26,
+                    color: Colors.white.withValues(alpha: 0.9),
+                  ),
                 ),
               ),
             ),
