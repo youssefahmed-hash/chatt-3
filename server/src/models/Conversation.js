@@ -68,6 +68,22 @@ export const Conversation = db.define(
       },
       field: 'last_message',
     },
+
+    // الرسائل المثبتة (بالترتيب: أحدث أولاً)
+    pinnedMessageIds: {
+      type: DataTypes.ARRAY(DataTypes.UUID),
+      allowNull: false,
+      defaultValue: [],
+      field: 'pinned_message_ids',
+    },
+
+    // مستخدمو المحادثة اللذين أرشيفوها
+    archivedBy: {
+      type: DataTypes.ARRAY(DataTypes.UUID),
+      allowNull: false,
+      defaultValue: [],
+      field: 'archived_by',
+    },
   },
   {
     timestamps: true,

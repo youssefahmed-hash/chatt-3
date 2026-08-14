@@ -7,8 +7,10 @@ export const MESSAGE_TYPES = [
   'voice',
   'videoCall',
   'voiceCall',
+  'file',
+  'video',
 ];
-//,'image'
+
 export const Message = db.define('Message', {
   id: {
     type: DataTypes.UUID,
@@ -45,6 +47,14 @@ export const Message = db.define('Message', {
     type: DataTypes.STRING(5000),
     defaultValue: '',
   },
+  // Client-generated id (e.g. a temp id from the offline queue) used to
+  // correlate the sender's local placeholder with the persisted echo.
+  clientId: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: null,
+    field: 'client_id',
+  },
   type: {
     type: DataTypes.ENUM(...MESSAGE_TYPES),
     defaultValue: 'text',
@@ -58,6 +68,64 @@ export const Message = db.define('Message', {
     type: DataTypes.ARRAY(DataTypes.UUID),
     defaultValue: [],
     field: 'read_by',
+  },
+  // edited indicator
+  edited: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+  },
+  // reply reference
+  replyToId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    defaultValue: null,
+    field: 'reply_to_id',
+  },
+  // forward reference
+  forwardedFrom: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    defaultValue: null,
+    field: 'forwarded_from',
+  },
+  // file metadata
+  fileUrl: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: null,
+    field: 'file_url',
+  },
+  fileName: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: null,
+    field: 'file_name',
+  },
+  fileSize: {
+    type: DataTypes.BIGINT,
+    allowNull: true,
+    defaultValue: null,
+    field: 'file_size',
+  },
+  fileType: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: null,
+    field: 'file_type',
+  },
+  // video metadata
+  videoUrl: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: null,
+    field: 'video_url',
+  },
+  videoThumbUrl: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: null,
+    field: 'video_thumb_url',
   },
 }, {
   timestamps: true,

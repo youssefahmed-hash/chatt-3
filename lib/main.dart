@@ -7,6 +7,8 @@ import 'screens/login_screen.dart';
 import 'services/session.dart';
 import 'services/socket_service.dart';
 import 'services/call_listener.dart';
+import 'services/notification_service.dart';
+import 'services/offline_queue.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,6 +24,11 @@ Future<void> main() async {
   // Restore saved theme
   final themeProvider = ThemeProvider();
   await themeProvider.loadTheme();
+
+  // Offline message queue + notifications.
+  await OfflineQueue.instance.init();
+  await NotificationService.init();
+  MessageNotificationListener.instance.start();
 
   runApp(
     MultiProvider(

@@ -7,6 +7,7 @@ import userRoutes from './routes/user.routes.js';
 import conversationRoutes from './routes/conversation.routes.js';
 import { notFound, errorHandler } from './middleware/error.js';
 import uploadRoutes from './routes/upload.routes.js';
+import callRoutes from './routes/call.routes.js';
 import path from 'path';
 import testRoutes from './routes/test.routes.js';
 export function createApp() {
@@ -24,6 +25,7 @@ export function createApp() {
   app.use('/api/auth', authRoutes);
   app.use('/api/users', userRoutes);
   app.use('/api/conversations', conversationRoutes);
+  app.use('/api/calls', callRoutes);
   app.use('/api/test', testRoutes);
 
   // 404 + central error handler (must be last).

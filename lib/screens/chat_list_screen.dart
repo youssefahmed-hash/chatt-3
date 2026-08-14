@@ -10,6 +10,9 @@ import 'chat_screen.dart';
 import 'login_screen.dart';
 import '../config/api_config.dart';
 import 'settings_screen.dart';
+import 'starred_messages_screen.dart';
+import 'call_history_screen.dart';
+import 'archived_chats_screen.dart';
 import './profile_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
@@ -29,6 +32,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   StreamSubscription<NewMessageEvent>? _msgSub;
   StreamSubscription<GroupAddedEvent>? _groupSub;
   StreamSubscription<GroupUpdatedEvent>? _groupUpdatedSub;
+  StreamSubscription<PresenceEvent>? _presenceSub;
   @override
   void initState() {
     super.initState();
@@ -36,6 +40,19 @@ class _ChatListScreenState extends State<ChatListScreen> {
     // When any new message arrives, refresh previews/ordering.
     _msgSub = SocketService.instance.onNewMessage.listen((_) {
       _loadConversations();
+    });
+
+    // Keep peer online/offline dots fresh.
+    _presenceSub = SocketService.instance.onPresence.listen((event) {
+      if (!mounted) return;
+      setState(() {
+        for (var i = 0; i < _chats.length; i++) {
+          if (_chats[i].peerId == event.userId) {
+            _chats[i].peerOnline = event.online;
+          }
+        }
+        _applySearch(searchController.text);
+      });
     });
 
     _groupSub = SocketService.instance.onGroupAdded.listen((event) {
@@ -78,6 +95,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     _msgSub?.cancel();
     _groupSub?.cancel();
     _groupUpdatedSub?.cancel();
+    _presenceSub?.cancel();
     searchController.dispose();
     super.dispose();
   }
@@ -208,6 +226,19 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
   }
 
+  Future<void> _toggleArchive(Chat chat) async {
+    if (chat.id == null) return;
+    try {
+      await ApiService.archiveConversation(chat.id!);
+      setState(() {
+        _chats.removeWhere((c) => c.id == chat.id);
+        _applySearch(searchController.text);
+      });
+    } catch (e) {
+      _showSnack('Failed to archive: $e');
+    }
+  }
+
   void _showSnack(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
@@ -216,43 +247,88 @@ class _ChatListScreenState extends State<ChatListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(Session.userName == null ? 'Chats' : 'Chats · ${Session.userName}'),
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
-        actions: [
+        appBar: AppBar(
+          title: Text(Session.userName == null ? 'Chats' : 'Chats · ${Session.userName}'),
+          backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+          actions: [
 
-          IconButton(
-            icon: const Icon(Icons.account_circle),
-            tooltip: 'Profile',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const ProfileScreen(),
+            IconButton(
+              icon: const Icon(Icons.account_circle),
+              tooltip: 'Profile',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ProfileScreen(),
+                  ),
+                );
+              },
+            ),
+
+            IconButton(
+              icon: const Icon(Icons.settings),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SettingsScreen(),
+                  ),
+                );
+              },
+            ),
+
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                switch (value) {
+                  case 'starred':
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const StarredMessagesScreen(),
+                      ),
+                    );
+                    break;
+                  case 'calls':
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const CallHistoryScreen(),
+                      ),
+                    );
+                    break;
+                  case 'archived':
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ArchivedChatsScreen(),
+                      ),
+                    );
+                    break;
+                }
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'starred',
+                  child: Text('Starred Messages'),
                 ),
-              );
-            },
-          ),
-
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const SettingsScreen(),
+                PopupMenuItem(
+                  value: 'calls',
+                  child: Text('Call History'),
                 ),
-              );
-            },
-          ),
+                PopupMenuItem(
+                  value: 'archived',
+                  child: Text('Archived Chats'),
+                ),
+              ],
+            ),
 
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
-            onPressed: _logout,
-          ),
-        ],
-      ),
+            IconButton(
+              icon: const Icon(Icons.logout),
+              tooltip: 'Logout',
+              onPressed: _logout,
+            ),
+          ],
+        ),
         floatingActionButton: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -356,19 +432,75 @@ class _ChatListScreenState extends State<ChatListScreen> {
               )
                   : null,
             ),
-            title: Text(chat.name),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    chat.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: chat.unreadCount > 0
+                        ? const TextStyle(fontWeight: FontWeight.bold)
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                if (!chat.isGroup && chat.peerOnline)
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF25D366),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+              ],
+            ),
             subtitle: Text(
               chat.lastMessage,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              style: chat.unreadCount > 0
+                  ? const TextStyle(fontWeight: FontWeight.bold)
+                  : null,
             ),
-            trailing: Text(chat.time, style: const TextStyle(fontSize: 12)),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(chat.time, style: const TextStyle(fontSize: 12)),
+                if (chat.unreadCount > 0) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.secondary,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      chat.unreadCount > 99
+                          ? '99+'
+                          : '${chat.unreadCount}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => ChatScreen(chat: chat)),
               ).then((_) => _loadConversations());
             },
+            onLongPress: () => _toggleArchive(chat),
           );
         },
       ),

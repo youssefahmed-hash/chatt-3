@@ -24,6 +24,8 @@ class CallListener {
               SocketService.instance.acceptCall(
                 callerId: event.caller['id'].toString(),
                 roomName: event.roomName,
+                conversationId: event.conversationId,
+                type: event.type,
               );
 
               await JitsiService.joinRoom(event.roomName);
@@ -36,6 +38,7 @@ class CallListener {
 
               SocketService.instance.rejectCall(
                 callerId: event.caller['id'].toString(),
+                conversationId: event.conversationId,
               );
 
             },

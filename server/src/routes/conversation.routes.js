@@ -3,6 +3,7 @@ import {
   listConversations,
   startConversation,
   listMessages,
+  searchMessages,
   startConversationSchema,
   createGroup,
   createGroupSchema,
@@ -15,6 +16,13 @@ import {
   updateGroupNameSchema,
   updateGroupName,
   updateGroupImage,
+  pinMessage,
+  unpinMessage,
+  listPinnedMessages,
+  archiveConversation,
+  unarchiveConversation,
+  listArchivedConversations,
+  messageContext,
 } from '../controllers/conversation.controller.js';
 
 import {
@@ -22,6 +30,18 @@ import {
   sendMessageSchema,
   sendImageMessage,
   sendVoiceMessage,
+  editMessage,
+  editMessageSchema,
+  addReaction,
+  addReactionSchema,
+  removeReaction,
+  forwardMessage,
+  forwardMessageSchema,
+  sendFileMessage,
+  sendVideoMessage,
+  starMessage,
+  unstarMessage,
+  listStarredMessages,
 } from '../controllers/message.controller.js';
 
 import { protect } from '../middleware/auth.js';
@@ -30,6 +50,8 @@ import {
   upload,
   groupUpload,
   voiceUpload,
+  fileUpload,
+  videoUpload,
 } from '../middleware/upload.js';
 const router = Router();
 
@@ -50,12 +72,26 @@ router.post(
 );
 
 router.post(
+  '/:id/messages/file',
+  fileUpload.single('file'),
+  sendFileMessage,
+);
+
+router.post(
+  '/:id/messages/video',
+  videoUpload.single('video'),
+  sendVideoMessage,
+);
+
+router.post(
   '/:id/members',
   validate(addMembersSchema),
   addMembers,
 );
 
 router.get('/:id/messages', listMessages);
+router.get('/:id/messages/search', searchMessages);
+router.get('/:id/messages/context', messageContext);
 
 router.post('/:id/messages', validate(sendMessageSchema), sendMessage);
 
@@ -64,6 +100,54 @@ router.post(
   upload.single('image'),
   sendImageMessage,
 );
+
+// Forward a message into this conversation.
+router.post(
+  '/:id/messages/forward',
+  validate(forwardMessageSchema),
+  forwardMessage,
+);
+
+// Edit own text message.
+router.patch(
+  '/:id/messages/:messageId',
+  validate(editMessageSchema),
+  editMessage,
+);
+
+// Reactions.
+router.post(
+  '/:id/messages/:messageId/reactions',
+  validate(addReactionSchema),
+  addReaction,
+);
+router.delete(
+  '/:id/messages/:messageId/reactions/:emoji',
+  removeReaction,
+);
+
+// Star / unstar a message.
+router.post(
+  '/:id/messages/:messageId/star',
+  starMessage,
+);
+router.delete(
+  '/:id/messages/:messageId/star',
+  unstarMessage,
+);
+
+// Starred messages (global, per-user).
+router.get('/starred', listStarredMessages);
+
+// Pin / unpin.
+router.post('/:id/pins/:messageId', pinMessage);
+router.delete('/:id/pins/:messageId', unpinMessage);
+router.get('/:id/pins', listPinnedMessages);
+
+// Archive / unarchive.
+router.post('/:id/archive', archiveConversation);
+router.delete('/:id/archive', unarchiveConversation);
+router.get('/archived', listArchivedConversations);
 
 router.delete(
   '/:id/members/:memberId',

@@ -43,3 +43,19 @@ export const avatarUpload = multer({
 export const voiceUpload = multer({
   storage: createStorage('voices'),
 });
+
+// 👇 للملفات
+export const fileUpload = multer({
+  storage: createStorage('files'),
+  limits: {
+    fileSize: 100 * 1024 * 1024, // 100 MB
+  },
+});
+
+// 👇 للفيديوهات
+export const videoUpload = multer({
+  storage: createStorage('videos'),
+  limits: {
+    fileSize: 250 * 1024 * 1024, // 250 MB
+  },
+});
