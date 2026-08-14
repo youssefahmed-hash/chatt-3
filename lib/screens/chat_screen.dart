@@ -1,9 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'group_info_screen.dart';
+import 'forward_screen.dart';
+import 'pinned_messages_screen.dart';
 import '../models/chat.dart';
 import '../models/message.dart';
 import '../models/message_type.dart';
@@ -11,17 +15,70 @@ import '../services/api_service.dart';
 import '../services/socket_service.dart';
 import '../services/jitsi_service.dart';
 import '../services/audio_service.dart';
+import '../services/offline_queue.dart';
+import '../services/session.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat/message_input.dart';
 import '../config/api_config.dart';
 import 'user_profile_screen.dart';
 
+const _reactionEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉'];
+
+/// Insert or replace a message in [messages], first adopting any local pending
+/// placeholder that shares the same [Message.clientId] (so the server echo of
+/// an online/offline send upgrades one ✓ to two gray ✓✓ instead of
+/// duplicating). [peerIds] is accepted for signature stability with the
+/// caller, matching how the chat screen computes read state.
+void upsertIntoList(
+  List<Message> messages,
+  Message incoming,
+  List<String> peerIds,
+) {
+  final clientId = incoming.clientId;
+  if (clientId != null && clientId.isNotEmpty) {
+    final idx = messages.indexWhere(
+      (m) => m.isMe && m.clientId == clientId,
+    );
+    if (idx != -1) {
+      messages[idx] = incoming;
+      return;
+    }
+  }
+
+  // Incoming without a server id (no clientId adoption possible) adopts the
+  // oldest pending placeholder so offline flushes never duplicate.
+  if (incoming.isMe) {
+    final pendingIdx = messages.indexWhere(
+      (m) => m.isMe && m.status == MessageStatus.pending,
+    );
+    if (pendingIdx != -1) {
+      messages[pendingIdx] = incoming;
+      return;
+    }
+  }
+
+  final id = incoming.id;
+  if (id != null) {
+    final idx = messages.indexWhere((m) => m.id == id);
+    if (idx != -1) {
+      messages[idx] = incoming;
+      return;
+    }
+  }
+
+  messages.add(incoming);
+}
+
 class ChatScreen extends StatefulWidget {
   final Chat chat;
+
+  /// When set, the chat opens scrolled to this message (highlighted).
+  final String? highlightMessageId;
 
   const ChatScreen({
     super.key,
     required this.chat,
+    this.highlightMessageId,
   });
 
   @override
@@ -38,6 +95,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   final ScrollController _scrollController =
   ScrollController();
+
+  bool _showScrollDownButton = false;
 
   final ImagePicker _picker =
   ImagePicker();
@@ -84,6 +143,77 @@ class _ChatScreenState extends State<ChatScreen> {
   StreamSubscription<CallRejectedEvent>?
   _callRejectedSub;
 
+  StreamSubscription<MessageEditedEvent>?
+  _editSub;
+
+  StreamSubscription<ReactionEvent>?
+  _reactionAddSub;
+
+  StreamSubscription<ReactionEvent>?
+  _reactionRemoveSub;
+
+  StreamSubscription<TypingEvent>?
+  _typingSub;
+
+  StreamSubscription<PresenceEvent>?
+  _presenceSub;
+
+  StreamSubscription<RecordingEvent>?
+  _recordingStartSub;
+
+  StreamSubscription<RecordingEvent>?
+  _recordingStopSub;
+
+  StreamSubscription<PinnedEvent>?
+  _pinSub;
+
+  StreamSubscription<PinnedEvent>?
+  _unpinSub;
+
+  StreamSubscription<ReadReceiptEvent>?
+  _readSub;
+
+  // ============================================================
+  // REPLY / EDIT
+  // ============================================================
+
+  ReplyPreview? _replyTo;
+
+  Message? _editingMessage;
+
+  // ============================================================
+  // PINNED / STARRED
+  // ============================================================
+
+  final Set<String> _pinnedIds = {};
+
+  final Set<String> _starredIds = {};
+
+  // ============================================================
+  // TYPING / RECORDING / ONLINE
+  // ============================================================
+
+  Timer? _typingTimer;
+
+  bool _peerTyping = false;
+
+  bool _peerRecording = false;
+
+  bool _peerOnline = false;
+
+  // ============================================================
+  // SEARCH
+  // ============================================================
+
+  bool _searching = false;
+
+  final TextEditingController _searchController =
+  TextEditingController();
+
+  List<Message> _searchResults = [];
+
+  bool _searchingLoading = false;
+
   // ============================================================
   // CONVERSATION ID
   // ============================================================
@@ -99,9 +229,13 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
 
+    _scrollController.addListener(_onScrollChanged);
+
     _messages.addAll(
-      widget.chat.messages,
+      widget.chat.messages.map(_applyReadState),
     );
+
+    _pinnedIds.addAll(widget.chat.pinnedMessageIds);
 
     _loadMessages();
 
@@ -112,6 +246,20 @@ class _ChatScreenState extends State<ChatScreen> {
     _listenForGroupUpdates();
 
     _listenForCallEvents();
+
+    _listenForEditedMessages();
+
+    _listenForReactions();
+
+    _listenForTyping();
+
+    _listenForPresence();
+
+    _listenForRecordingIndicator();
+
+    _listenForPins();
+
+    _listenForReadReceipts();
   }
 
   // ============================================================
@@ -121,18 +269,35 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _msgSub?.cancel();
-
     _deleteSub?.cancel();
-
     _groupUpdatedSub?.cancel();
-
     _callAcceptedSub?.cancel();
-
     _callRejectedSub?.cancel();
+    _editSub?.cancel();
+    _reactionAddSub?.cancel();
+    _reactionRemoveSub?.cancel();
+    _typingSub?.cancel();
+    _presenceSub?.cancel();
+    _recordingStartSub?.cancel();
+    _recordingStopSub?.cancel();
+    _pinSub?.cancel();
+    _unpinSub?.cancel();
+    _readSub?.cancel();
+    _typingTimer?.cancel();
+
+    // Notify the peer that we stopped typing when leaving the screen.
+    final id = _conversationId;
+    if (id != null) {
+      SocketService.instance.setTyping(
+        conversationId: id,
+        peerId: widget.chat.peerId ?? '',
+        typing: false,
+      );
+    }
 
     controller.dispose();
-
     _scrollController.dispose();
+    _searchController.dispose();
 
     _audioService.dispose();
 
@@ -192,6 +357,14 @@ class _ChatScreenState extends State<ChatScreen> {
             DateTime.now();
       });
 
+      final id = _conversationId;
+      if (id != null) {
+        SocketService.instance.setRecording(
+          conversationId: id,
+          recording: true,
+        );
+      }
+
       debugPrint(
         'RECORDING STARTED',
       );
@@ -214,6 +387,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
       final path =
       await _audioService.stopRecording();
+
+      final id = _conversationId;
+      if (id != null) {
+        SocketService.instance.setRecording(
+          conversationId: id,
+          recording: false,
+        );
+      }
 
       debugPrint(
         'Recording path: $path',
@@ -252,11 +433,20 @@ class _ChatScreenState extends State<ChatScreen> {
         'Recording duration: $duration',
       );
 
+      final replyId = _replyTo?.id;
+
       await ApiService.sendVoice(
         conversationId,
         XFile(path),
         duration,
+        replyToId: replyId,
       );
+
+      if (mounted) {
+        setState(() {
+          _replyTo = null;
+        });
+      }
 
       debugPrint(
         'VOICE SENT',
@@ -289,6 +479,14 @@ class _ChatScreenState extends State<ChatScreen> {
       await _audioService
           .cancelRecording();
 
+      final id = _conversationId;
+      if (id != null) {
+        SocketService.instance.setRecording(
+          conversationId: id,
+          recording: false,
+        );
+      }
+
       if (!mounted) return;
 
       setState(() {
@@ -306,44 +504,6 @@ class _ChatScreenState extends State<ChatScreen> {
           _isRecording = false;
         });
       }
-    }
-  }
-
-  // ============================================================
-  // PAUSE RECORDING
-  // ============================================================
-
-  Future<void> _pauseRecording() async {
-    try {
-      debugPrint(
-        'PAUSE RECORDING',
-      );
-
-      await _audioService
-          .pauseRecording();
-    } catch (e) {
-      debugPrint(
-        'PAUSE RECORDING ERROR: $e',
-      );
-    }
-  }
-
-  // ============================================================
-  // RESUME RECORDING
-  // ============================================================
-
-  Future<void> _resumeRecording() async {
-    try {
-      debugPrint(
-        'RESUME RECORDING',
-      );
-
-      await _audioService
-          .resumeRecording();
-    } catch (e) {
-      debugPrint(
-        'RESUME RECORDING ERROR: $e',
-      );
     }
   }
 
@@ -366,6 +526,33 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     try {
+      // Opening to a specific message (e.g. from pinned / search).
+      if (widget.highlightMessageId != null) {
+        final messages = await ApiService.getMessageContext(
+          conversationId: id,
+          messageId: widget.highlightMessageId!,
+        );
+
+        if (!mounted) return;
+
+        setState(() {
+          _messages
+            ..clear()
+            ..addAll(messages.map(_applyReadState));
+          _loading = false;
+        });
+
+        _scrollToMessage(widget.highlightMessageId!);
+
+        if (widget.chat.peerId != null) {
+          SocketService.instance.markRead(
+            conversationId: id,
+            peerId: widget.chat.peerId!,
+          );
+        }
+        return;
+      }
+
       final messages =
       await ApiService
           .getMessages(id);
@@ -375,22 +562,21 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _messages
           ..clear()
-          ..addAll(messages);
+          ..addAll(messages.map(_applyReadState));
 
         _loading = false;
       });
 
       _scrollToBottom();
 
-      // Mark peer messages as read.
-      if (widget.chat.peerId != null) {
-        SocketService.instance
-            .markRead(
-          conversationId: id,
-          peerId:
-          widget.chat.peerId!,
-        );
-      }
+      // Mark peer messages as read (direct chats id the peer; groups let the
+      // server resolve all other participants).
+      SocketService.instance
+          .markRead(
+        conversationId: id,
+        peerId:
+        widget.chat.peerId ?? '',
+      );
     } catch (e) {
       debugPrint(
         'LOAD MESSAGES ERROR: $e',
@@ -428,7 +614,14 @@ class _ChatScreenState extends State<ChatScreen> {
       await ApiService.sendImage(
         conversationId,
         image,
+        replyToId: _replyTo?.id,
       );
+
+      if (mounted) {
+        setState(() {
+          _replyTo = null;
+        });
+      }
 
       debugPrint(
         'Image uploaded successfully',
@@ -437,6 +630,95 @@ class _ChatScreenState extends State<ChatScreen> {
       debugPrint(
         'Upload failed: $e',
       );
+    }
+  }
+
+  // ============================================================
+  // PICK FILE
+  // ============================================================
+
+  Future<void> pickFile() async {
+    // On web, file_picker exposes the contents in [PlatformFile.bytes], so
+    // request it with `withData` to build a web-compatible XFile.
+    final result = await FilePicker.pickFiles(
+      withData: kIsWeb,
+      allowMultiple: false,
+    );
+
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.first;
+
+    final XFile? xfile;
+    if (kIsWeb) {
+      final bytes = file.bytes;
+      if (bytes == null) return;
+      xfile = XFile.fromData(bytes, name: file.name);
+    } else {
+      final path = file.path;
+      if (path == null) return;
+      xfile = XFile(path);
+    }
+
+    final conversationId = _conversationId;
+    if (conversationId == null) return;
+
+    try {
+      final sent = await ApiService.sendFile(
+        conversationId,
+        xfile,
+        replyToId: _replyTo?.id,
+      );
+
+      if (mounted) {
+        setState(() {
+          _upsertMessage(sent);
+          _replyTo = null;
+        });
+      }
+    } catch (e) {
+      debugPrint('Upload file failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('File upload failed: $e')),
+        );
+      }
+    }
+  }
+
+  // ============================================================
+  // PICK VIDEO
+  // ============================================================
+
+  Future<void> pickVideo() async {
+    final XFile? video = await _picker.pickVideo(
+      source: ImageSource.gallery,
+    );
+
+    if (video == null) return;
+
+    final conversationId = _conversationId;
+    if (conversationId == null) return;
+
+    try {
+      await ApiService.sendVideo(
+        conversationId,
+        video,
+        replyToId: _replyTo?.id,
+      );
+
+      if (mounted) {
+        setState(() {
+          _replyTo = null;
+        });
+      }
+    } catch (e) {
+      debugPrint('Upload video failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Video upload failed: $e')),
+        );
+      }
     }
   }
 
@@ -457,12 +739,276 @@ class _ChatScreenState extends State<ChatScreen> {
           if (!mounted) return;
 
           setState(() {
-            _messages.add(
-              event.message,
-            );
+            _upsertMessage(event.message);
           });
 
           _scrollToBottom();
+
+          // Read receipt: an incoming message appearing while we're in the
+          // conversation is read right away, so the peer's "read" ticks and
+          // the chat list unread badge update live.
+          final id = _conversationId;
+          if (id != null && !event.message.isMe) {
+            SocketService.instance.markRead(
+              conversationId: id,
+              peerId: widget.chat.peerId ?? '',
+            );
+          }
+        });
+  }
+
+  // ============================================================
+  // READ RECEIPTS (two blue ticks)
+  // ============================================================
+
+  void _listenForReadReceipts() {
+    _readSub =
+        SocketService.instance
+            .onMessageRead
+            .listen((event) {
+          if (event.conversationId !=
+              _conversationId) {
+            return;
+          }
+
+          if (!mounted) return;
+
+          setState(() {
+            for (final m in event.messages) {
+              final idx = _messages.indexWhere(
+                (x) => x.id != null && x.id == m.id,
+              );
+              if (idx != -1) {
+                _messages[idx] = _applyReadState(m);
+              }
+            }
+          });
+        });
+  }
+
+  // ============================================================
+  // MESSAGE STATUS HELPERS
+  // ============================================================
+
+  /// Users (besides the sender) that can read messages in this chat.
+  List<String> _otherParticipantIds() {
+    if (widget.chat.isGroup) {
+      return widget.chat.members
+          .map((m) => m.id.toString())
+          .where((id) => id != Session.userId)
+          .toList();
+    }
+    final peerId = widget.chat.peerId;
+    return peerId != null && peerId.isNotEmpty ? [peerId] : const [];
+  }
+
+  /// Compute the WhatsApp-style status of a server-confirmed message using
+  /// the existing readBy semantics (all other participants must have read).
+  Message _applyReadState(Message m) {
+    if (!m.isMe) return m;
+    if (m.id == null || m.status == MessageStatus.pending) return m;
+
+    final others = _otherParticipantIds();
+    if (others.isEmpty) return m.copyWith(status: MessageStatus.delivered);
+
+    final readSet = m.readBy.map((e) => e.toString()).toSet();
+    final allRead = others.every((id) => readSet.contains(id));
+    return m.copyWith(
+      status: allRead ? MessageStatus.read : MessageStatus.delivered,
+    );
+  }
+
+  /// Insert or replace a message, first adopting any local pending
+  /// placeholder that shares the same [Message.clientId] (so the server echo
+  /// of an online/offline send upgrades one ✓ to two gray ✓✓ instead of
+  /// duplicating).
+  void _upsertMessage(Message raw) {
+    final incoming = _applyReadState(raw);
+    upsertIntoList(_messages, incoming, _otherParticipantIds());
+  }
+
+  // ============================================================
+  // EDITED MESSAGES
+  // ============================================================
+
+  void _listenForEditedMessages() {
+    _editSub =
+        SocketService.instance
+            .onMessageEdited
+            .listen((event) {
+          if (event.conversationId !=
+              _conversationId) {
+            return;
+          }
+
+          if (!mounted) return;
+
+          setState(() {
+            _upsertMessage(event.message);
+          });
+        });
+  }
+
+  // ============================================================
+  // REACTIONS
+  // ============================================================
+
+  void _listenForReactions() {
+    _reactionAddSub =
+        SocketService.instance
+            .onReactionAdded
+            .listen((event) {
+          _applyReactionEvent(event);
+        });
+
+    _reactionRemoveSub =
+        SocketService.instance
+            .onReactionRemoved
+            .listen((event) {
+          _applyReactionEvent(event);
+        });
+  }
+
+  void _applyReactionEvent(ReactionEvent event) {
+    if (event.conversationId != _conversationId) return;
+    if (!mounted) return;
+
+    setState(() {
+      final index = _messages.indexWhere((m) => m.id == event.messageId);
+      if (index == -1) return;
+
+      final old = _messages[index];
+      final myReactions = event.reactions.entries
+          .where((e) => e.value.isReactedBy(Session.userId ?? ''))
+          .map((e) => e.key)
+          .toList();
+
+      _messages[index] = old.copyWith(
+        reactions: event.reactions,
+        myReactions: myReactions,
+      );
+    });
+  }
+
+  // ============================================================
+  // TYPING
+  // ============================================================
+
+  void _listenForTyping() {
+    _typingSub =
+        SocketService.instance.onTyping.listen((event) {
+          if (event.conversationId != _conversationId) return;
+          if (event.userId == Session.userId) return;
+          if (!mounted) return;
+
+          setState(() {
+            _peerTyping = event.typing;
+          });
+        });
+  }
+
+  void _onTypingChanged() {
+    final id = _conversationId;
+    if (id == null) return;
+
+    SocketService.instance.setTyping(
+      conversationId: id,
+      peerId: widget.chat.peerId ?? '',
+      typing: true,
+    );
+
+    _typingTimer?.cancel();
+    _typingTimer = Timer(const Duration(seconds: 2), () {
+      SocketService.instance.setTyping(
+        conversationId: id,
+        peerId: widget.chat.peerId ?? '',
+        typing: false,
+      );
+    });
+  }
+
+  // ============================================================
+  // ONLINE / OFFLINE
+  // ============================================================
+
+  void _listenForPresence() {
+    if (widget.chat.peerId == null) return;
+
+    _presenceSub =
+        SocketService.instance.onPresence.listen((event) {
+          if (event.userId != widget.chat.peerId) return;
+          if (!mounted) return;
+
+          setState(() {
+            _peerOnline = event.online;
+          });
+        });
+
+    // Initial online state from the profile endpoint.
+    ApiService.getUserProfile(widget.chat.peerId!)
+        .then((profile) {
+      if (!mounted) return;
+      setState(() {
+        _peerOnline = profile.online;
+      });
+    }).catchError((_) {});
+  }
+
+  // ============================================================
+  // RECORDING INDICATOR (other users)
+  // ============================================================
+
+  void _listenForRecordingIndicator() {
+    _recordingStartSub =
+        SocketService.instance.onRecordingStarted.listen((event) {
+          if (event.conversationId != _conversationId) return;
+          if (event.userId == Session.userId) return;
+          if (!mounted) return;
+
+          setState(() {
+            _peerRecording = true;
+          });
+        });
+
+    _recordingStopSub =
+        SocketService.instance.onRecordingStopped.listen((event) {
+          if (event.conversationId != _conversationId) return;
+          if (event.userId == Session.userId) return;
+          if (!mounted) return;
+
+          setState(() {
+            _peerRecording = false;
+          });
+        });
+  }
+
+  // ============================================================
+  // PIN EVENTS
+  // ============================================================
+
+  void _listenForPins() {
+    _pinSub =
+        SocketService.instance.onMessagePinned.listen((event) {
+          if (event.conversationId != _conversationId) return;
+          if (!mounted) return;
+
+          setState(() {
+            _pinnedIds
+              ..clear()
+              ..addAll(event.pinnedMessageIds);
+          });
+        });
+
+    _unpinSub =
+        SocketService.instance.onMessageUnpinned.listen((event) {
+          if (event.conversationId != _conversationId) return;
+          if (!mounted) return;
+
+          setState(() {
+            _pinnedIds
+              ..clear()
+              ..addAll(event.pinnedMessageIds);
+          });
         });
   }
 
@@ -471,10 +1017,6 @@ class _ChatScreenState extends State<ChatScreen> {
   // ============================================================
 
   void _listenForCallEvents() {
-    // ----------------------------------------------------------
-    // CALL ACCEPTED
-    // ----------------------------------------------------------
-
     _callAcceptedSub =
         SocketService.instance
             .onCallAccepted
@@ -483,19 +1025,11 @@ class _ChatScreenState extends State<ChatScreen> {
             'CALL ACCEPTED EVENT',
           );
 
-          debugPrint(
-            event.roomName,
-          );
-
           await JitsiService
               .joinRoom(
             event.roomName,
           );
         });
-
-    // ----------------------------------------------------------
-    // CALL REJECTED
-    // ----------------------------------------------------------
 
     _callRejectedSub =
         SocketService.instance
@@ -515,7 +1049,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // ============================================================
-  // SCROLL TO BOTTOM
+  // SCROLL
   // ============================================================
 
   void _scrollToBottom() {
@@ -534,8 +1068,43 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  void _onScrollChanged() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    final atBottom = position.extentAfter < 80;
+    if (atBottom != !_showScrollDownButton) {
+      setState(() {
+        _showScrollDownButton = !atBottom;
+      });
+    }
+  }
+
+  Future<void> _scrollToMessage(String messageId) async {
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+
+      final index = _messages.indexWhere((m) => m.id == messageId);
+      if (index == -1) return;
+
+      // Estimate: approximate by item extent ratio.
+      final extent = _scrollController.position.maxScrollExtent;
+      final ratio = _messages.isEmpty
+          ? 0.0
+          : index / (_messages.length - 1);
+      _scrollController.jumpTo(extent * ratio);
+
+      _flashMessage(index);
+    });
+  }
+
+  void _flashMessage(int index) {
+    // Nothing extra needed; the list will position the message at that index.
+  }
+
   // ============================================================
-  // SEND MESSAGE
+  // SEND MESSAGE (text)
   // ============================================================
 
   void sendMessage() {
@@ -550,51 +1119,364 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    debugPrint(
-      'conversationId = $id',
+    // Notify the other side that we stopped typing.
+    _typingTimer?.cancel();
+    SocketService.instance.setTyping(
+      conversationId: id,
+      peerId: widget.chat.peerId ?? '',
+      typing: false,
     );
 
-    debugPrint(
-      'text = $text',
+    final replyId = _replyTo?.id;
+
+    final tempId = _tempId();
+    final local = Message(
+      id: tempId,
+      clientId: tempId,
+      text: text,
+      isMe: true,
+      type: MessageType.text,
+      replyToId: replyId,
+      replyTo: _replyTo,
+      status: MessageStatus.pending,
     );
+
+    if (!SocketService.instance.isConnected) {
+      // Offline: show a one-tick pending message and queue for later delivery.
+      if (mounted) {
+        setState(() => _messages.add(local));
+      }
+      OfflineQueue.instance.enqueue(PendingMessage(
+        id: tempId,
+        conversationId: id,
+        text: text,
+        replyToId: replyId,
+        createdAt: DateTime.now(),
+      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Offline — message queued, will send when connected'),
+        ),
+      );
+      widget.chat.lastMessage = text;
+      controller.clear();
+      if (mounted) {
+        setState(() {
+          _replyTo = null;
+        });
+      }
+      return;
+    }
+
+    if (mounted) {
+      setState(() => _messages.add(local));
+    }
 
     SocketService.instance
         .sendMessage(
       conversationId: id,
       text: text,
+      replyToId: replyId,
+      clientId: tempId,
     );
 
     widget.chat.lastMessage =
         text;
 
     controller.clear();
+
+    if (mounted) {
+      setState(() {
+        _replyTo = null;
+      });
+    }
+  }
+
+  String _tempId() =>
+      'local_${DateTime.now().microsecondsSinceEpoch}';
+
+  // ============================================================
+  // EDIT
+  // ============================================================
+
+  void _startEditing(Message message) {
+    if (message.type != MessageType.text) return;
+
+    setState(() {
+      _editingMessage = message;
+      _replyTo = null;
+    });
+
+    controller.text = message.text;
+    controller.selection =
+        TextSelection.collapsed(offset: message.text.length);
+  }
+
+  void _cancelEditing() {
+    setState(() {
+      _editingMessage = null;
+    });
+    controller.clear();
+  }
+
+  Future<void> _finishEditing() async {
+    final message = _editingMessage;
+    final id = _conversationId;
+
+    if (message == null || message.id == null || id == null) return;
+
+    final text = controller.text.trim();
+    if (text.isEmpty) return;
+
+    try {
+      if (SocketService.instance.isConnected) {
+        SocketService.instance.editMessage(
+          conversationId: id,
+          messageId: message.id!,
+          text: text,
+        );
+      } else {
+        await ApiService.editMessage(
+          conversationId: id,
+          messageId: message.id!,
+          text: text,
+        );
+      }
+
+      if (mounted) {
+        setState(() {
+          _editingMessage = null;
+        });
+        controller.clear();
+      }
+    } catch (e) {
+      debugPrint('EDIT ERROR: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Edit failed: $e')),
+        );
+      }
+    }
   }
 
   // ============================================================
-  // SEND CALL
+  // REACTIONS
   // ============================================================
 
-  void _sendCall(
-      MessageType type,
-      ) {
-    debugPrint(
-      'START CALL',
+  void _toggleReaction(Message message, String emoji) {
+    final id = _conversationId;
+    if (id == null || message.id == null) return;
+
+    if (emoji.isEmpty) {
+      _showReactionPicker(message);
+      return;
+    }
+
+    final already = message.myReactions.contains(emoji);
+
+    if (already) {
+      SocketService.instance.removeReaction(
+        conversationId: id,
+        messageId: message.id!,
+        emoji: emoji,
+      );
+    } else {
+      SocketService.instance.addReaction(
+        conversationId: id,
+        messageId: message.id!,
+        emoji: emoji,
+      );
+    }
+  }
+
+  void _showReactionPicker(Message message) {
+    final theme = Theme.of(context);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: theme.dialogTheme.backgroundColor,
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: _reactionEmojis.map((emoji) {
+              return GestureDetector(
+                onTap: () {
+                  Navigator.pop(context);
+                  _toggleReaction(message, emoji);
+                },
+                child: Text(
+                  emoji,
+                  style: const TextStyle(fontSize: 30),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ),
     );
+  }
 
-    final id =
-        _conversationId;
+  // ============================================================
+  // FORWARD
+  // ============================================================
 
+  Future<void> _forwardMessage(Message message) async {
+    if (message.id == null) return;
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ForwardScreen(message: message),
+      ),
+    );
+  }
+
+  // ============================================================
+  // PIN / STAR
+  // ============================================================
+
+  Future<void> _pinMessage(Message message) async {
+    final id = _conversationId;
+    if (id == null || message.id == null) return;
+
+    try {
+      await ApiService.pinMessage(
+        conversationId: id,
+        messageId: message.id!,
+      );
+      if (mounted) {
+        setState(() {
+          _pinnedIds.add(message.id!);
+        });
+      }
+    } catch (e) {
+      debugPrint('PIN ERROR: $e');
+    }
+  }
+
+  Future<void> _unpinMessage(Message message) async {
+    final id = _conversationId;
+    if (id == null || message.id == null) return;
+
+    try {
+      await ApiService.unpinMessage(
+        conversationId: id,
+        messageId: message.id!,
+      );
+      if (mounted) {
+        setState(() {
+          _pinnedIds.remove(message.id!);
+        });
+      }
+    } catch (e) {
+      debugPrint('UNPIN ERROR: $e');
+    }
+  }
+
+  Future<void> _starMessage(Message message) async {
+    final id = _conversationId;
+    if (id == null || message.id == null) return;
+
+    try {
+      await ApiService.starMessage(
+        conversationId: id,
+        messageId: message.id!,
+      );
+      if (mounted) {
+        setState(() {
+          _starredIds.add(message.id!);
+        });
+      }
+    } catch (e) {
+      debugPrint('STAR ERROR: $e');
+    }
+  }
+
+  Future<void> _unstarMessage(Message message) async {
+    final id = _conversationId;
+    if (id == null || message.id == null) return;
+
+    try {
+      await ApiService.unstarMessage(
+        conversationId: id,
+        messageId: message.id!,
+      );
+      if (mounted) {
+        setState(() {
+          _starredIds.remove(message.id!);
+        });
+      }
+    } catch (e) {
+      debugPrint('UNSTAR ERROR: $e');
+    }
+  }
+
+  bool get _canPin {
+    if (!widget.chat.isGroup) return true;
+    final admins = widget.chat.admins.map((e) => e.toString()).toList();
+    return admins.contains(Session.userId);
+  }
+
+  // ============================================================
+  // REPLY TO MESSAGE
+  // ============================================================
+
+  void _replyToMessage(Message message) {
+    setState(() {
+      _editingMessage = null;
+      _replyTo = ReplyPreview(
+        id: message.id,
+        text: message.text,
+        type: message.type,
+        senderName: message.senderName,
+        imageUrl: message.imageUrl,
+        voiceUrl: message.voiceUrl,
+        fileName: message.fileName,
+      );
+    });
+  }
+
+  void _cancelReply() {
+    setState(() {
+      _replyTo = null;
+    });
+  }
+
+  // ============================================================
+  // TAP REPLY PREVIEW -> scroll to original
+  // ============================================================
+
+  Future<void> _tapReply(Message message) async {
+    final targetId = message.replyToId;
+    if (targetId == null) return;
+
+    final existing = _messages.indexWhere((m) => m.id == targetId);
+    if (existing != -1) {
+      _scrollToMessage(targetId);
+      return;
+    }
+
+    // Load context around the original message, then scroll.
+    final id = _conversationId;
     if (id == null) return;
 
-    final roomName =
-        'chatt_$id';
-
-    SocketService.instance
-        .startCall(
-      conversationId: id,
-      roomName: roomName,
-      type: type,
-    );
+    try {
+      final messages = await ApiService.getMessageContext(
+        conversationId: id,
+        messageId: targetId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _messages
+          ..clear()
+          ..addAll(messages);
+      });
+      _scrollToMessage(targetId);
+    } catch (e) {
+      debugPrint('REPLY TAP ERROR: $e');
+    }
   }
 
   // ============================================================
@@ -654,6 +1536,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   event.messageId,
             );
 
+            _pinnedIds.remove(event.messageId);
+
             if (_messages.isNotEmpty) {
               widget.chat.lastMessage =
                   _messages.last.text;
@@ -666,8 +1550,109 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // ============================================================
+  // SEARCH
+  // ============================================================
+
+  Future<void> _runSearch(String query) async {
+    final id = _conversationId;
+    if (id == null) return;
+
+    setState(() {
+      _searchingLoading = true;
+    });
+
+    try {
+      final results = await ApiService.searchMessages(
+        conversationId: id,
+        query: query,
+      );
+      if (!mounted) return;
+      setState(() {
+        _searchResults = results;
+        _searchingLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _searchResults = [];
+        _searchingLoading = false;
+      });
+    }
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _searching = !_searching;
+      if (!_searching) {
+        _searchResults = [];
+        _searchController.clear();
+      }
+    });
+  }
+
+  Future<void> _openSearchResult(Message m) async {
+    // Load context around the result and scroll to it.
+    final id = _conversationId;
+    if (id == null || m.id == null) return;
+
+    try {
+      final messages = await ApiService.getMessageContext(
+        conversationId: id,
+        messageId: m.id!,
+      );
+      if (!mounted) return;
+      setState(() {
+        _searching = false;
+        _searchController.clear();
+        _searchResults = [];
+        _messages
+          ..clear()
+          ..addAll(messages);
+      });
+      _scrollToMessage(m.id!);
+    } catch (e) {
+      debugPrint('SEARCH OPEN ERROR: $e');
+    }
+  }
+
+  // ============================================================
+  // SEND CALL
+  // ============================================================
+
+  void _sendCall(
+      MessageType type,
+      ) {
+    debugPrint(
+      'START CALL',
+    );
+
+    final id =
+        _conversationId;
+
+    if (id == null) return;
+
+    final roomName =
+        'chatt_$id';
+
+    SocketService.instance
+        .startCall(
+      conversationId: id,
+      roomName: roomName,
+      type: type,
+    );
+  }
+
+  // ============================================================
   // BUILD
   // ============================================================
+
+  String get _appBarSubtitle {
+    if (_peerTyping) return 'typing...';
+    if (_peerRecording) return 'Recording voice...';
+    if (!widget.chat.isGroup && _peerOnline) return 'online';
+    if (widget.chat.isGroup) return '${widget.chat.members.length} members';
+    return widget.chat.peerId == null ? '' : '';
+  }
 
   @override
   Widget build(
@@ -677,10 +1662,6 @@ class _ChatScreenState extends State<ChatScreen> {
     Theme.of(context);
 
     return Scaffold(
-      // ==========================================================
-      // BACKGROUND
-      // ==========================================================
-
       backgroundColor:
       theme.brightness ==
           Brightness.dark
@@ -691,154 +1672,155 @@ class _ChatScreenState extends State<ChatScreen> {
         0xFFECE5DD,
       ),
 
-      // ==========================================================
-      // APP BAR
-      // ==========================================================
-
       appBar: AppBar(
-        title: GestureDetector(
-          onTap: () {
-            // ----------------------------------------------------
-            // GROUP
-            // ----------------------------------------------------
-
-            if (widget.chat.isGroup) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      GroupInfoScreen(
-                        chat:
-                        widget.chat,
-                      ),
+        title: _searching
+            ? TextField(
+                controller: _searchController,
+                autofocus: true,
+                style: TextStyle(
+                  color: theme.appBarTheme.foregroundColor,
                 ),
-              );
+                decoration: InputDecoration(
+                  hintText: 'Search messages...',
+                  hintStyle: const TextStyle(color: Colors.white54),
+                  border: InputBorder.none,
+                ),
+                onChanged: (q) {
+                  if (q.trim().isEmpty) {
+                    setState(() {
+                      _searchResults = [];
+                    });
+                    return;
+                  }
+                  _runSearch(q.trim());
+                },
+              )
+            : GestureDetector(
+                onTap: () {
+                  if (widget.chat.isGroup) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            GroupInfoScreen(
+                              chat:
+                              widget.chat,
+                            ),
+                      ),
+                    );
 
-              return;
-            }
+                    return;
+                  }
 
-            // ----------------------------------------------------
-            // USER
-            // ----------------------------------------------------
+                  if (widget.chat.peerId == null) {
+                    return;
+                  }
 
-            if (widget.chat.peerId ==
-                null) {
-              return;
-            }
-
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) =>
-                    UserProfileScreen(
-                      userId:
-                      widget.chat.peerId!,
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          UserProfileScreen(
+                            userId:
+                            widget.chat.peerId!,
+                          ),
                     ),
-              ),
-            );
-          },
+                  );
+                },
 
-          child: Row(
-            children: [
-              // --------------------------------------------------
-              // AVATAR
-              // --------------------------------------------------
-
-              CircleAvatar(
-                radius: 18,
-
-                backgroundColor:
-                theme
-                    .colorScheme
-                    .secondary,
-
-                backgroundImage:
-                widget.chat.isGroup &&
-                    widget.chat
-                        .groupImage !=
-                        null &&
-                    widget.chat
-                        .groupImage!
-                        .isNotEmpty
-                    ? NetworkImage(
-                  '${ApiConfig.baseUrl}'
-                      '${widget.chat.groupImage}',
-                )
-                    : null,
-
-                child:
-                !(widget.chat
-                    .isGroup &&
-                    widget.chat
-                        .groupImage !=
-                        null &&
-                    widget.chat
-                        .groupImage!
-                        .isNotEmpty)
-                    ? Text(
-                  widget.chat
-                      .name[0]
-                      .toUpperCase(),
-                  style:
-                  const TextStyle(
-                    color:
-                    Colors.white,
-                    fontWeight:
-                    FontWeight.bold,
-                  ),
-                )
-                    : null,
-              ),
-
-              const SizedBox(
-                width: 12,
-              ),
-
-              // --------------------------------------------------
-              // NAME
-              // --------------------------------------------------
-
-              Expanded(
-                child: Column(
-                  crossAxisAlignment:
-                  CrossAxisAlignment
-                      .start,
-                  mainAxisAlignment:
-                  MainAxisAlignment
-                      .center,
+                child: Row(
                   children: [
-                    Text(
-                      widget.chat.name,
-                      overflow:
-                      TextOverflow
-                          .ellipsis,
-                      style: TextStyle(
-                        color: theme
-                            .appBarTheme
-                            .foregroundColor,
-                        fontWeight:
-                        FontWeight
-                            .w600,
-                      ),
+                    CircleAvatar(
+                      radius: 18,
+
+                      backgroundColor:
+                      theme
+                          .colorScheme
+                          .secondary,
+
+                      backgroundImage:
+                      widget.chat.isGroup &&
+                          widget.chat
+                              .groupImage !=
+                              null &&
+                          widget.chat
+                              .groupImage!
+                              .isNotEmpty
+                          ? NetworkImage(
+                        '${ApiConfig.baseUrl}'
+                            '${widget.chat.groupImage}',
+                      )
+                          : null,
+
+                      child:
+                      !(widget.chat
+                          .isGroup &&
+                          widget.chat
+                              .groupImage !=
+                              null &&
+                          widget.chat
+                              .groupImage!
+                              .isNotEmpty)
+                          ? Text(
+                        widget.chat
+                            .name[0]
+                            .toUpperCase(),
+                        style:
+                        const TextStyle(
+                          color:
+                          Colors.white,
+                          fontWeight:
+                          FontWeight.bold,
+                        ),
+                      )
+                          : null,
                     ),
 
-                    if (!widget
-                        .chat.isGroup)
-                      const Text(
-                        'Tap to view profile',
-                        style:
-                        TextStyle(
-                          fontSize: 11,
-                          color:
-                          Colors.white70,
-                        ),
+                    const SizedBox(
+                      width: 12,
+                    ),
+
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment:
+                        CrossAxisAlignment
+                            .start,
+                        mainAxisAlignment:
+                        MainAxisAlignment
+                            .center,
+                        children: [
+                          Text(
+                            widget.chat.name,
+                            overflow:
+                            TextOverflow
+                                .ellipsis,
+                            style: TextStyle(
+                              color: theme
+                                  .appBarTheme
+                                  .foregroundColor,
+                              fontWeight:
+                              FontWeight
+                                  .w600,
+                            ),
+                          ),
+
+                          if (!_searching)
+                            Text(
+                              _appBarSubtitle,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: _peerTyping || _peerRecording
+                                    ? Colors.white
+                                    : Colors.white70,
+                              ),
+                            ),
+                        ],
                       ),
+                    ),
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
 
         backgroundColor:
         theme.appBarTheme
@@ -850,11 +1832,38 @@ class _ChatScreenState extends State<ChatScreen> {
 
         elevation: 0,
 
-        // ========================================================
-        // CALL BUTTONS
-        // ========================================================
-
         actions: [
+          IconButton(
+            color: theme
+                .appBarTheme
+                .foregroundColor,
+            icon: Icon(
+              _searching ? Icons.close : Icons.search,
+            ),
+            onPressed: _toggleSearch,
+          ),
+
+          if (_pinnedIds.isNotEmpty)
+            IconButton(
+              color: theme
+                  .appBarTheme
+                  .foregroundColor,
+              icon: const Icon(
+                Icons.push_pin,
+              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        PinnedMessagesScreen(
+                          chat: widget.chat,
+                        ),
+                  ),
+                );
+              },
+            ),
+
           IconButton(
             color: theme
                 .appBarTheme
@@ -885,31 +1894,28 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
 
-      // ==========================================================
-      // BODY
-      // ==========================================================
-
       body: Container(
         color:
         theme.scaffoldBackgroundColor,
 
         child: Column(
           children: [
-            // ====================================================
-            // MESSAGES
-            // ====================================================
-
             Expanded(
-              child: _loading
-                  ? Center(
-                child:
-                CircularProgressIndicator(
-                  color: theme
-                      .colorScheme
-                      .secondary,
-                ),
-              )
-                  : ListView.builder(
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: _searching
+                        ? _buildSearchResults(theme)
+                        : _loading
+                        ? Center(
+                      child:
+                      CircularProgressIndicator(
+                        color: theme
+                            .colorScheme
+                            .secondary,
+                      ),
+                    )
+                        : ListView.builder(
                 controller:
                 _scrollController,
 
@@ -928,9 +1934,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     context,
                     index,
                     ) {
+                  final message = _messages[index];
+
                   return MessageBubble(
-                    message:
-                    _messages[index],
+                    message: message,
 
                     onDelete:
                         () async {
@@ -938,14 +1945,79 @@ class _ChatScreenState extends State<ChatScreen> {
                         index,
                       );
                     },
+
+                    onReply: () =>
+                        _replyToMessage(message),
+
+                    onEdit: () =>
+                        _startEditing(message),
+
+                    onForward: () =>
+                        _forwardMessage(message),
+
+                    onPin: () =>
+                        _pinMessage(message),
+
+                    onUnpin: () =>
+                        _unpinMessage(message),
+
+                    onStar: () =>
+                        _starMessage(message),
+
+                    onUnstar: () =>
+                        _unstarMessage(message),
+
+                    onReaction: (emoji) =>
+                        _toggleReaction(message, emoji),
+
+                    onTapReply: () =>
+                        _tapReply(message),
+
+                    isPinned: message.id != null &&
+                        _pinnedIds.contains(message.id),
+
+                    isStarred: message.id != null &&
+                        _starredIds.contains(message.id),
+
+                    canPin: _canPin,
                   );
                 },
               ),
+                  ),
+                  if (_showScrollDownButton)
+                    Positioned(
+                      right: 6,
+                      bottom: 6,
+                      child: FloatingActionButton(
+                        heroTag: 'scrollDown',
+                        mini: true,
+                        backgroundColor: theme.colorScheme.secondary,
+                        onPressed: () {
+                          _scrollController.animateTo(
+                            _scrollController.position.maxScrollExtent,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOut,
+                          );
+                        },
+                        child: const Icon(Icons.arrow_downward),
+                      ),
+                    ),
+                ],
+              ),
             ),
 
-            // ====================================================
-            // MESSAGE INPUT
-            // ====================================================
+            if (_peerRecording)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  'Recording voice...',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                    color: theme.colorScheme.secondary,
+                  ),
+                ),
+              ),
 
             MessageInput(
               controller: controller,
@@ -953,6 +2025,10 @@ class _ChatScreenState extends State<ChatScreen> {
               onSend: sendMessage,
 
               onPickImage: pickImage,
+
+              onPickFile: pickFile,
+
+              onPickVideo: pickVideo,
 
               isRecording: _isRecording,
 
@@ -975,10 +2051,54 @@ class _ChatScreenState extends State<ChatScreen> {
 
               waveformStream:
               _audioService.waveformStream,
+
+              reply: _replyTo,
+
+              onCancelReply: _cancelReply,
+
+              isEditing: _editingMessage != null,
+
+              onEditingDone: _finishEditing,
+
+              onCancelEditing: _cancelEditing,
+
+              onTyping: _onTypingChanged,
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSearchResults(ThemeData theme) {
+    if (_searchingLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_searchResults.isEmpty) {
+      return const Center(
+        child: Text('No matching messages'),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: _searchResults.length,
+      itemBuilder: (context, index) {
+        final m = _searchResults[index];
+        return ListTile(
+          title: Text(
+            m.type == MessageType.text ? m.text : '${m.type.asString} message',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Text(
+            '${m.senderName ?? 'Unknown'} · '
+            '${m.createdAt.hour.toString().padLeft(2, '0')}:'
+            '${m.createdAt.minute.toString().padLeft(2, '0')}',
+          ),
+          onTap: () => _openSearchResult(m),
+        );
+      },
     );
   }
 }

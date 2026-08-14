@@ -5,21 +5,154 @@ import 'call_message_card.dart';
 import '../screens/full_screen_image.dart';
 import '../config/api_config.dart';
 import 'voice_message_player.dart';
+import 'quoted_message_preview.dart';
+import 'file_message_card.dart';
+import 'video_message_player.dart';
+import 'reaction_bar.dart';
 
 class MessageBubble extends StatelessWidget {
   final Message message;
   final VoidCallback? onDelete;
+  final VoidCallback? onReply;
+  final VoidCallback? onEdit;
+  final VoidCallback? onForward;
+  final VoidCallback? onPin;
+  final VoidCallback? onUnpin;
+  final VoidCallback? onStar;
+  final VoidCallback? onUnstar;
+  final ValueChanged<String>? onReaction;
+  final VoidCallback? onTapReply;
+  final bool isPinned;
+  final bool isStarred;
+  final bool canPin;
 
   const MessageBubble({
     super.key,
     required this.message,
     this.onDelete,
+    this.onReply,
+    this.onEdit,
+    this.onForward,
+    this.onPin,
+    this.onUnpin,
+    this.onStar,
+    this.onUnstar,
+    this.onReaction,
+    this.onTapReply,
+    this.isPinned = false,
+    this.isStarred = false,
+    this.canPin = false,
   });
 
   String _formatTime(DateTime dt) {
     final h = dt.hour.toString().padLeft(2, '0');
     final m = dt.minute.toString().padLeft(2, '0');
     return '$h:$m';
+  }
+
+  void _showActions(BuildContext context, {required bool isMe}) {
+    final theme = Theme.of(context);
+
+    final actions = <Widget>[
+      ListTile(
+        leading: const Icon(Icons.reply),
+        title: const Text('Reply'),
+        onTap: () {
+          Navigator.pop(context);
+          onReply?.call();
+        },
+      ),
+      ListTile(
+        leading: const Icon(Icons.forward),
+        title: const Text('Forward'),
+        onTap: () {
+          Navigator.pop(context);
+          onForward?.call();
+        },
+      ),
+      ListTile(
+        leading: Icon(isStarred ? Icons.star : Icons.star_border),
+        title: Text(isStarred ? 'Unstar' : 'Star'),
+        onTap: () {
+          Navigator.pop(context);
+          (isStarred ? onUnstar : onStar)?.call();
+        },
+      ),
+      if (canPin)
+        ListTile(
+          leading: Icon(isPinned ? Icons.push_pin : Icons.push_pin_outlined),
+          title: Text(isPinned ? 'Unpin' : 'Pin'),
+          onTap: () {
+            Navigator.pop(context);
+            (isPinned ? onUnpin : onPin)?.call();
+          },
+        ),
+      if (isMe && message.type == MessageType.text)
+        ListTile(
+          leading: const Icon(Icons.edit_outlined),
+          title: const Text('Edit'),
+          onTap: () {
+            Navigator.pop(context);
+            onEdit?.call();
+          },
+        ),
+      if (isMe)
+        ListTile(
+          leading: const Icon(Icons.delete_outline, color: Colors.red),
+          title: const Text('Delete', style: TextStyle(color: Colors.red)),
+          onTap: () {
+            Navigator.pop(context);
+            _confirmDelete(context);
+          },
+        ),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: theme.dialogTheme.backgroundColor,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: actions,
+        ),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context) {
+    final theme = Theme.of(context);
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: theme.dialogTheme.backgroundColor,
+        title: const Text("Delete Message"),
+        content: const Text(
+          "Are you sure you want to delete this message?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              "Cancel",
+              style: TextStyle(
+                color: theme.colorScheme.secondary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              onDelete?.call();
+            },
+            child: const Text(
+              "Delete",
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -48,46 +181,9 @@ class MessageBubble extends StatelessWidget {
     final maxWidth =
         MediaQuery.of(context).size.width * 0.75;
 
-    return GestureDetector(
-      onLongPress: () {
-        if (!isMe) return;
-
-        showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            backgroundColor:
-            theme.dialogTheme.backgroundColor,
-            title: const Text("Delete Message"),
-            content: const Text(
-              "Are you sure you want to delete this message?",
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(
-                  "Cancel",
-                  style: TextStyle(
-                    color:
-                    theme.colorScheme.secondary,
-                  ),
-                ),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  onDelete?.call();
-                },
-                child: const Text(
-                  "Delete",
-                  style: TextStyle(
-                    color: Colors.red,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+    return _ReplySwipeDetector(
+      onLongPress: () => _showActions(context, isMe: isMe),
+      onReply: onReply,
       child: Align(
         alignment:
         isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -119,8 +215,8 @@ class MessageBubble extends StatelessWidget {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(
-                    isDark ? 0.35 : 0.12,
+                  color: Colors.black.withValues(
+                    alpha: isDark ? 0.35 : 0.12,
                   ),
                   blurRadius: 2,
                   offset: const Offset(0, 1),
@@ -144,6 +240,27 @@ class MessageBubble extends StatelessWidget {
                         fontWeight:
                         FontWeight.bold,
                         fontSize: 13,
+                      ),
+                    ),
+                  ),
+
+                // ===== الرد =====
+                if (message.replyTo != null)
+                  QuotedMessagePreview(
+                    reply: message.replyTo,
+                    onTap: onTapReply,
+                  ),
+
+                // ===== Forwarded label =====
+                if (message.isForwarded)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Text(
+                      'Forwarded',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                        color: theme.textTheme.bodySmall?.color,
                       ),
                     ),
                   ),
@@ -194,6 +311,22 @@ class MessageBubble extends StatelessWidget {
                     message.voiceDuration,
                   )
 
+                else if (message.type ==
+                    MessageType.file)
+                  FileMessageCard(
+                    url: message.fileUrl,
+                    fileName: message.fileName,
+                    fileSize: message.fileSize,
+                    fileType: message.fileType,
+                  )
+
+                else if (message.type ==
+                    MessageType.video)
+                  VideoMessagePlayer(
+                    url: message.videoUrl!,
+                    thumbUrl: message.videoThumbUrl,
+                  )
+
                 else
                   Text(
                     message.text,
@@ -207,14 +340,47 @@ class MessageBubble extends StatelessWidget {
 
                 const SizedBox(height: 4),
 
-                Text(
-                  _formatTime(message.createdAt),
-                  style: TextStyle(
-                    color: isDark
-                        ? Colors.white60
-                        : Colors.grey.shade600,
-                    fontSize: 11,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (message.edited)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: Text(
+                          'edited',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontStyle: FontStyle.italic,
+                            color: isDark
+                                ? Colors.white60
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                    Text(
+                      _formatTime(message.createdAt),
+                      style: TextStyle(
+                        color: isDark
+                            ? Colors.white60
+                            : Colors.grey.shade600,
+                        fontSize: 11,
+                      ),
+                    ),
+
+                    // ===== Delivery / read check marks (sender only) =====
+                    if (message.isMe) ...[
+                      const SizedBox(width: 3),
+                      _CheckMarks(status: message.status),
+                    ],
+                  ],
+                ),
+
+                // ===== Reactions =====
+                ReactionBar(
+                  reactions: message.reactions,
+                  myReactions: message.myReactions,
+                  emojis: const [],
+                  onTap: onReaction ?? (_) {},
                 ),
               ],
             ),
@@ -222,5 +388,81 @@ class MessageBubble extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Wraps a message bubble and triggers [onReply] when the user swipes the
+/// bubble to the right past a small threshold.
+class _ReplySwipeDetector extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onReply;
+  final GestureLongPressCallback? onLongPress;
+
+  const _ReplySwipeDetector({
+    required this.child,
+    this.onReply,
+    this.onLongPress,
+  });
+
+  @override
+  State<_ReplySwipeDetector> createState() => _ReplySwipeDetectorState();
+}
+
+class _ReplySwipeDetectorState extends State<_ReplySwipeDetector> {
+  static const _threshold = 60.0;
+  double _dx = 0;
+
+  void _reset() {
+    if (_dx != 0) setState(() => _dx = 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPress: widget.onLongPress,
+      onHorizontalDragUpdate: (details) {
+        setState(() => _dx += details.delta.dx);
+      },
+      onHorizontalDragEnd: (_) {
+        if (_dx > _threshold && widget.onReply != null) {
+          widget.onReply!.call();
+        }
+        _reset();
+      },
+      onHorizontalDragCancel: _reset,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        transform: _dx > 0 ? Matrix4.translationValues(_dx.clamp(0, 48), 0, 0) : null,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// WhatsApp-style delivery ticks for outgoing messages.
+class _CheckMarks extends StatelessWidget {
+  final MessageStatus status;
+
+  const _CheckMarks({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final pendingColor = isDark ? Colors.white38 : Colors.grey.shade400;
+    final deliveredColor = isDark ? Colors.white54 : Colors.grey.shade600;
+    final readColor = const Color(0xFF53BDEB);
+
+    switch (status) {
+      case MessageStatus.pending:
+        // One gray tick — created locally, delivery not yet confirmed.
+        return Icon(Icons.done, size: 14, color: pendingColor);
+      case MessageStatus.delivered:
+        // Two gray ticks — persisted on the server.
+        return Icon(Icons.done_all, size: 14, color: deliveredColor);
+      case MessageStatus.read:
+        // Two blue ticks — read by the recipient.
+        return Icon(Icons.done_all, size: 14, color: readColor);
+    }
   }
 }

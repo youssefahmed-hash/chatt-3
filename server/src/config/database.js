@@ -1,5 +1,6 @@
 import { Sequelize } from 'sequelize';
 import { env } from './env.js';
+import { ensureEnumValues } from '../utils/ensureEnums.js';
 
 export const db = new Sequelize(env.db.name, env.db.user, env.db.password, {
   host: env.db.host,
@@ -19,10 +20,20 @@ export async function connectDB() {
     await import('../models/Conversation.js');
     await import('../models/Message.js');
     await import('../models/Otp.js');
+    await import('../models/Reaction.js');
+    await import('../models/Call.js');
+    await import('../models/StarredMessage.js');
+
+    // Upgrade existing Postgres enums before sync runs.
+    await ensureEnumValues();
 
     // Sync tables (creates tables if they don't exist)
     await db.sync({ alter: true });
     console.log('✅ Database synced');
+
+    // Register model associations after sync (needed for eager loading like
+    // StarredMessage -> Message).
+    await import('../config/associations.js');
   } catch (err) {
     console.error('❌ PostgreSQL connection error:', err.message);
     process.exit(1);

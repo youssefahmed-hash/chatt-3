@@ -24,6 +24,14 @@ class Chat {
 
   final List<Message> messages;
 
+  final List<String> pinnedMessageIds;
+
+  bool peerOnline;
+
+  String? peerLastSeen;
+
+  int unreadCount;
+
   Chat({
     this.id,
     this.peerId,
@@ -36,6 +44,10 @@ class Chat {
     required this.lastMessage,
     required this.time,
     required this.messages,
+    this.pinnedMessageIds = const [],
+    this.peerOnline = false,
+    this.peerLastSeen,
+    this.unreadCount = 0,
   });
 
   factory Chat.fromJson(Map<String, dynamic> json) {
@@ -64,6 +76,11 @@ class Chat {
         lastMessage: last?['text'] ?? '',
         time: _formatTime(last?['at'] ?? json['updatedAt']),
         messages: [],
+        pinnedMessageIds: (json['pinnedMessageIds'] as List?)
+            ?.map((e) => e.toString())
+            .toList() ??
+            [],
+        unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
       );
     }
 
@@ -81,6 +98,13 @@ class Chat {
       messages: [],
       admins: const [],
       createdBy: null,
+      pinnedMessageIds: (json['pinnedMessageIds'] as List?)
+          ?.map((e) => e.toString())
+          .toList() ??
+          [],
+      peerOnline: peer?['online'] == true,
+      peerLastSeen: peer?['lastSeen']?.toString(),
+      unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
     );
   }
 

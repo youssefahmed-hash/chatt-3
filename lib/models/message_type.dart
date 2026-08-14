@@ -4,6 +4,8 @@ enum MessageType {
   voice,
   videoCall,
   voiceCall,
+  file,
+  video,
 }
 
 /// Maps the backend string values to the [MessageType] enum.
@@ -20,6 +22,12 @@ MessageType messageTypeFromString(String? value) {
 
     case 'voiceCall':
       return MessageType.voiceCall;
+
+    case 'file':
+      return MessageType.file;
+
+    case 'video':
+      return MessageType.video;
 
     case 'text':
     default:
@@ -45,6 +53,12 @@ extension MessageTypeX on MessageType {
 
       case MessageType.voiceCall:
         return 'voiceCall';
+
+      case MessageType.file:
+        return 'file';
+
+      case MessageType.video:
+        return 'video';
     }
   }
 }

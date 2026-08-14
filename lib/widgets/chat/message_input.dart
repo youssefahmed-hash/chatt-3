@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:chatt/models/message.dart';
+import 'package:chatt/models/message_type.dart';
 import 'package:chatt/widgets/chat/voice_recorder_bar.dart';
 
 import 'mic_button.dart';
@@ -33,6 +35,22 @@ class MessageInput extends StatefulWidget {
 
   final Stream<double>? waveformStream;
 
+  // ===== REPLY =====
+  final ReplyPreview? reply;
+  final VoidCallback? onCancelReply;
+
+  // ===== EDIT =====
+  final bool isEditing;
+  final VoidCallback? onEditingDone;
+  final VoidCallback? onCancelEditing;
+
+  // ===== TYPING =====
+  final VoidCallback? onTyping;
+
+  // ===== FILES / VIDEOS =====
+  final VoidCallback? onPickFile;
+  final VoidCallback? onPickVideo;
+
   const MessageInput({
     super.key,
 
@@ -55,6 +73,22 @@ class MessageInput extends StatefulWidget {
     required this.onResumeRecording,
 
     required this.waveformStream,
+
+    this.reply,
+
+    this.onCancelReply,
+
+    this.isEditing = false,
+
+    this.onEditingDone,
+
+    this.onCancelEditing,
+
+    this.onTyping,
+
+    this.onPickFile,
+
+    this.onPickVideo,
   });
 
   @override
@@ -128,6 +162,8 @@ class _MessageInputState
           widget.controller.text
               .trim()
               .isNotEmpty;
+
+      widget.onTyping?.call();
 
       if (value != _hasText &&
           mounted) {
@@ -549,9 +585,24 @@ class _MessageInputState
         ),
       ),
 
-      child: Stack(
-        clipBehavior:
-        Clip.none,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ======================================================
+          // REPLY PREVIEW BAR
+          // ======================================================
+          if (widget.reply != null)
+            _buildReplyBar(theme),
+
+          // ======================================================
+          // EDITING BAR
+          // ======================================================
+          if (widget.isEditing)
+            _buildEditingBar(theme),
+
+          Stack(
+            clipBehavior:
+            Clip.none,
 
         children: [
           // ======================================================
@@ -560,6 +611,34 @@ class _MessageInputState
 
           Row(
             children: [
+              // ====================================================
+              // ATTACH (FILES)
+              // ====================================================
+
+              IconButton(
+                icon: Icon(
+                  Icons.attach_file,
+                  color: theme
+                      .colorScheme
+                      .secondary,
+                ),
+                onPressed: widget.onPickFile,
+              ),
+
+              // ====================================================
+              // VIDEO
+              // ====================================================
+
+              IconButton(
+                icon: Icon(
+                  Icons.videocam,
+                  color: theme
+                      .colorScheme
+                      .secondary,
+                ),
+                onPressed: widget.onPickVideo,
+              ),
+
               // ====================================================
               // IMAGE
               // ====================================================
@@ -834,15 +913,18 @@ class _MessageInputState
                 child: _hasText
                     ? IconButton(
                   icon: Icon(
-                    Icons.send,
+                    widget.isEditing
+                        ? Icons.check
+                        : Icons.send,
 
                     color: theme
                         .colorScheme
                         .secondary,
                   ),
 
-                  onPressed:
-                  widget.onSend,
+                  onPressed: widget.isEditing
+                      ? widget.onEditingDone
+                      : widget.onSend,
                 )
                     : const SizedBox(),
               ),
@@ -858,7 +940,7 @@ class _MessageInputState
           if (showMicButton)
             Positioned(
               right: 4,
-              bottom: 7.9,
+              bottom: 9.9,
 
               child: MicButton(
                 isRecording:
@@ -879,6 +961,139 @@ class _MessageInputState
                 _handleLongPressEnd,
               ),
             ),
+        ],
+      ),
+    ],
+  ),
+  );
+  }
+
+  // ============================================================
+  // REPLY BAR
+  // ============================================================
+
+  Widget _buildReplyBar(ThemeData theme) {
+    final reply = widget.reply!;
+
+    String preview = '';
+    switch (reply.type) {
+      case MessageType.image:
+        preview = '📷 Photo';
+        break;
+      case MessageType.voice:
+        preview = '🎤 Voice message';
+        break;
+      case MessageType.file:
+        preview = '📎 ${reply.fileName ?? 'File'}';
+        break;
+      case MessageType.video:
+        preview = '🎬 Video';
+        break;
+      case MessageType.videoCall:
+        preview = '📹 Video call';
+        break;
+      case MessageType.voiceCall:
+        preview = '📞 Voice call';
+        break;
+      case MessageType.text:
+        preview = reply.text.isEmpty ? 'Message' : reply.text;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: theme.brightness == Brightness.dark
+            ? const Color(0xFF2A2A2A)
+            : const Color(0xFFF2F2F2),
+        borderRadius: BorderRadius.circular(10),
+        border: Border(
+          left: BorderSide(
+            color: theme.colorScheme.secondary,
+            width: 3,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  reply.senderName == null || reply.senderName!.isEmpty
+                      ? 'Reply'
+                      : reply.senderName!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.secondary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  preview,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: theme.textTheme.bodyLarge?.color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            icon: const Icon(Icons.close, size: 18),
+            onPressed: widget.onCancelReply,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // EDITING BAR
+  // ============================================================
+
+  Widget _buildEditingBar(ThemeData theme) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: theme.brightness == Brightness.dark
+            ? const Color(0xFF2A2A2A)
+            : const Color(0xFFF2F2F2),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.edit, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Editing message',
+              style: TextStyle(
+                fontSize: 13,
+                color: theme.textTheme.bodyLarge?.color,
+              ),
+            ),
+          ),
+          IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            icon: const Icon(Icons.close, size: 18),
+            onPressed: widget.onCancelEditing,
+          ),
         ],
       ),
     );
