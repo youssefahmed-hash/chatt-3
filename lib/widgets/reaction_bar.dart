@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 import '../models/message.dart';
 
 /// Emoji reaction bar shown under a message.
+///
+/// WhatsApp-style compact bar: existing reactions render as small emoji pills
+/// followed by an add-reaction [+] pill. The bar is kept small so it never
+/// forces the message bubble wider than its text content.
 class ReactionBar extends StatelessWidget {
   final Map<String, ReactionSummary> reactions;
   final List<String> myReactions;
   final List<String> emojis;
   final ValueChanged<String> onTap;
 
-  /// Fallback quick reactions shown when no list is provided, so a message
-  /// without reactions still offers an affordance to react.
+  /// Fallback quick reactions offered when no list is provided, so adding a
+  /// first reaction is still possible via the [+] pill.
   static const _defaultEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
   const ReactionBar({
@@ -29,90 +33,74 @@ class ReactionBar extends StatelessWidget {
 
     final quickEmojis = emojis.isNotEmpty ? emojis : _defaultEmojis;
 
-    // Nothing to show: no reactions yet and no quick reactions configured.
+    // Nothing to offer: no reactions yet and no quick reactions configured.
     if (entries.isEmpty && quickEmojis.isEmpty) return const SizedBox.shrink();
 
+    // Kept compact (max 200 wide, wraps to a second line) so the bar never
+    // widens the message bubble beyond its text like WhatsApp.
     return Align(
       alignment: Alignment.centerRight,
       child: Padding(
         padding: const EdgeInsets.only(top: 4),
-        child: Wrap(
-          spacing: 4,
-          runSpacing: 4,
-          children: [
-            if (entries.isNotEmpty) ...[
-              ...entries.map((e) {
-                final reacted = myReactions.contains(e.key);
-                return GestureDetector(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 200),
+          child: Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            alignment: WrapAlignment.end,
+            children: [
+              ...entries.map(
+                (e) => _pill(
+                  context,
+                  label: '${e.key} ${e.value.count}',
+                  reacted: myReactions.contains(e.key),
                   onTap: () => onTap(e.key),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: reacted
-                          ? Theme.of(context).colorScheme.secondary
-                              .withValues(alpha: 0.25)
-                          : Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: reacted
-                            ? Theme.of(context).colorScheme.secondary
-                            : Colors.transparent,
-                      ),
-                    ),
-                    child: Text(
-                      '${e.key} ${e.value.count}',
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                  ),
-                );
-              }),
-              // Quick-reaction button.
-              GestureDetector(
-                onTap: () => onTap(''),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.grey.shade400),
-                  ),
-                  child: const Icon(Icons.add_reaction_outlined, size: 15),
                 ),
               ),
-            ] else
-              ...quickEmojis.map((emoji) {
-                final reacted = myReactions.contains(emoji);
-                return GestureDetector(
-                  onTap: () => onTap(emoji),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: reacted
-                          ? Theme.of(context).colorScheme.secondary
-                              .withValues(alpha: 0.25)
-                          : Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: reacted
-                            ? Theme.of(context).colorScheme.secondary
-                            : Colors.grey.shade400,
-                      ),
-                    ),
-                    child: Text(emoji, style: const TextStyle(fontSize: 13)),
-                  ),
-                );
-              }),
-          ],
+              // Add-reaction pill: offers a first reaction on fresh messages.
+              _pill(
+                context,
+                icon: Icons.add_reaction_outlined,
+                onTap: () => onTap(''),
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _pill(
+    BuildContext context, {
+    String? label,
+    IconData? icon,
+    bool reacted = false,
+    required VoidCallback onTap,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: label != null ? 8 : 6,
+          vertical: 3,
+        ),
+        decoration: BoxDecoration(
+          color: reacted
+              ? colors.secondary.withValues(alpha: 0.25)
+              : colors.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: reacted
+                ? colors.secondary
+                : label != null
+                    ? Colors.transparent
+                    : Colors.grey.shade400,
+          ),
+        ),
+        child: label != null
+            ? Text(label, style: const TextStyle(fontSize: 13))
+            : Icon(icon, size: 15),
       ),
     );
   }

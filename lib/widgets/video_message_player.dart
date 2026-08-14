@@ -132,44 +132,52 @@ class _VideoMessagePlayerState extends State<VideoMessagePlayer> {
     final controller = _controller!;
     final playing = controller.value.isPlaying;
 
-    return GestureDetector(
-      // Tapping the video message opens it large/fullscreen.
-      onTap: _openFullscreen,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: Stack(
-          children: [
-            SizedBox(
-              width: 220,
-              child: AspectRatio(
-                aspectRatio: controller.value.aspectRatio,
-                child: VideoPlayer(controller),
-              ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Stack(
+        children: [
+          SizedBox(
+            width: 220,
+            child: AspectRatio(
+              aspectRatio: controller.value.aspectRatio,
+              child: VideoPlayer(controller),
             ),
-            Positioned(
-              left: 6,
-              bottom: 4,
-              child: GestureDetector(
-                // Small inline play/pause control so tapping the rest of the
-                // video still opens the fullscreen view.
-                onTap: _togglePlay,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    shape: BoxShape.circle,
-                  ),
-                  padding: const EdgeInsets.all(2),
-                  child: Icon(
-                    playing ? Icons.pause_circle_filled : Icons.play_circle_fill,
-                    size: 26,
-                    color: Colors.white.withValues(alpha: 0.9),
-                  ),
+          ),
+          // Full-size overlay: the platform video view swallows pointer
+          // events on web, so a plain GestureDetector around the player never
+          // fires. Cover it with an invisible tap layer to open the fullscreen
+          // viewer on tap, like WhatsApp.
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _openFullscreen,
+            ),
+          ),
+          Positioned(
+            left: 6,
+            bottom: 4,
+            child: GestureDetector(
+              // Small inline play/pause control; tapping anywhere else on the
+              // video opens the fullscreen view.
+              onTap: _togglePlay,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                padding: const EdgeInsets.all(2),
+                child: Icon(
+                  playing ? Icons.pause_circle_filled : Icons.play_circle_fill,
+                  size: 26,
+                  color: Colors.white.withValues(alpha: 0.9),
                 ),
               ),
             ),
-            Positioned(
-              bottom: 4,
-              right: 6,
+          ),
+          Positioned(
+            bottom: 4,
+            right: 6,
+            child: IgnorePointer(
               child: Text(
                 '${_formatDuration(controller.value.position)} / '
                 '${_formatDuration(controller.value.duration)}',
@@ -180,8 +188,8 @@ class _VideoMessagePlayerState extends State<VideoMessagePlayer> {
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
