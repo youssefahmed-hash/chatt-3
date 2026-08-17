@@ -16,6 +16,9 @@ class SocketService {
   static final SocketService instance = SocketService._();
 
   io.Socket? _socket;
+  // Token the current socket was created with; used to detect an account
+  // switch while the socket is still initialised.
+  String? _socketToken;
 
   // Broadcast streams the UI can subscribe to.
   final _connectionState = StreamController<bool>.broadcast();
@@ -65,15 +68,25 @@ class SocketService {
   bool get isConnected => _socket?.connected ?? false;
 
   void connect() {
-    if (_socket != null) return; // already initialised
     if (!Session.isLoggedIn) return;
+
+    final token = Session.token;
+    if (_socket != null) {
+      // Never reuse a socket created for a different identity: after an
+      // account switch on the same device the old socket would keep sending
+      // this user's messages as the previous account (wrong sender/direction).
+      if (_socketToken == token) return; // already initialised for this identity
+      disconnect();
+    }
+    _socketToken = token;
+    if (token == null || token.isEmpty) return;
 
     _socket = io.io(
       ApiConfig.baseUrl,
       io.OptionBuilder()
           .setTransports(['websocket'])
           .disableAutoConnect()
-          .setAuth({'token': Session.token})
+          .setAuth({'token': token})
           .build(),
     );
 
@@ -468,6 +481,7 @@ class SocketService {
   void disconnect() {
     _socket?.dispose();
     _socket = null;
+    _socketToken = null;
   }
 
   void _log(String msg) {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
+import '../config/api_config.dart';
 import 'otp_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -17,6 +18,7 @@ class _RegisterScreenState
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  final _domainCtrl = TextEditingController();
 
   bool loading = false;
 
@@ -30,6 +32,11 @@ class _RegisterScreenState
     });
 
     try {
+
+      final rawDomain = _domainCtrl.text.trim();
+      if (rawDomain.isNotEmpty) {
+        await ApiConfig.setBaseUrl(rawDomain);
+      }
 
       await AuthService.register(
 
@@ -97,6 +104,22 @@ class _RegisterScreenState
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+
+            TextField(
+
+              controller: _domainCtrl,
+
+              keyboardType: TextInputType.url,
+
+              decoration: const InputDecoration(
+
+                hintText: "Server domain (api.example.com)",
+
+              ),
+
+            ),
+
+            const SizedBox(height: 15),
 
             TextField(
 

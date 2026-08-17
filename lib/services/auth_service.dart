@@ -1,5 +1,7 @@
 import 'api_service.dart';
+import 'offline_queue.dart';
 import 'session.dart';
+import 'socket_service.dart';
 
 class AuthService {
 
@@ -34,6 +36,15 @@ class AuthService {
   }
 
   static Future<void> logout() async {
+
+    // Tear down the socket for the current identity so a later login on this
+    // device never sends messages under the previous account. Every logout
+    // path (dashboard, chat list) goes through here.
+    SocketService.instance.disconnect();
+
+    // Drop pending messages owned by the signed-out identity so they can never
+    // be delivered (with the wrong sender) after the next login.
+    await OfflineQueue.instance.clear();
 
     await Session.clear();
 

@@ -107,16 +107,21 @@ class VoiceRecorderBar extends StatelessWidget {
                       alignment:
                       Alignment.centerRight,
 
-                      child: Row(
-                        mainAxisAlignment:
-                        MainAxisAlignment.end,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
 
-                        crossAxisAlignment:
-                        CrossAxisAlignment.center,
+                        child: Row(
+                          mainAxisAlignment:
+                          MainAxisAlignment.end,
 
-                        children:
-                        _buildWaveform(
-                          secondary,
+                          crossAxisAlignment:
+                          CrossAxisAlignment.center,
+
+                          children:
+                          _buildWaveform(
+                            secondary,
+                          ),
                         ),
                       ),
                     ),
@@ -144,6 +149,10 @@ class VoiceRecorderBar extends StatelessWidget {
 
                     fontWeight:
                     FontWeight.w600,
+
+                    fontFeatures: const [
+                      FontFeature.tabularFigures(),
+                    ],
                   ),
                 ),
               ],

@@ -286,8 +286,11 @@ class _MessageInputState
   }
 
   String get _time {
-    final minutes =
-    (_seconds ~/ 60)
+    final hours = _seconds >= 3600
+        ? (_seconds ~/ 3600).toString().padLeft(2, '0')
+        : null;
+
+    final minutes = ((_seconds ~/ 60) % 60)
         .toString()
         .padLeft(2, '0');
 
@@ -296,7 +299,9 @@ class _MessageInputState
         .toString()
         .padLeft(2, '0');
 
-    return '$minutes:$seconds';
+    return hours == null
+        ? '$minutes:$seconds'
+        : '$hours:$minutes:$seconds';
   }
 
   // ============================================================
@@ -615,44 +620,47 @@ class _MessageInputState
               // ATTACH (FILES)
               // ====================================================
 
-              IconButton(
-                icon: Icon(
-                  Icons.attach_file,
-                  color: theme
-                      .colorScheme
-                      .secondary,
+              if (!showRecorderBar)
+                IconButton(
+                  icon: Icon(
+                    Icons.attach_file,
+                    color: theme
+                        .colorScheme
+                        .secondary,
+                  ),
+                  onPressed: widget.onPickFile,
                 ),
-                onPressed: widget.onPickFile,
-              ),
 
               // ====================================================
               // VIDEO
               // ====================================================
 
-              IconButton(
-                icon: Icon(
-                  Icons.videocam,
-                  color: theme
-                      .colorScheme
-                      .secondary,
+              if (!showRecorderBar)
+                IconButton(
+                  icon: Icon(
+                    Icons.videocam,
+                    color: theme
+                        .colorScheme
+                        .secondary,
+                  ),
+                  onPressed: widget.onPickVideo,
                 ),
-                onPressed: widget.onPickVideo,
-              ),
 
               // ====================================================
               // IMAGE
               // ====================================================
 
-              IconButton(
-                icon: Icon(
-                  Icons.image,
-                  color: theme
-                      .colorScheme
-                      .secondary,
+              if (!showRecorderBar)
+                IconButton(
+                  icon: Icon(
+                    Icons.image,
+                    color: theme
+                        .colorScheme
+                        .secondary,
+                  ),
+                  onPressed:
+                  widget.onPickImage,
                 ),
-                onPressed:
-                widget.onPickImage,
-              ),
 
               // ====================================================
               // CENTER
@@ -840,6 +848,12 @@ class _MessageInputState
                                     textAlign:
                                     TextAlign
                                         .center,
+
+                                    maxLines: 1,
+
+                                    overflow:
+                                    TextOverflow
+                                        .ellipsis,
 
                                     style:
                                     TextStyle(

@@ -435,7 +435,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
       final replyId = _replyTo?.id;
 
-      await ApiService.sendVoice(
+      final sent = await ApiService.sendVoice(
         conversationId,
         XFile(path),
         duration,
@@ -444,6 +444,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
       if (mounted) {
         setState(() {
+          _upsertMessage(sent);
           _replyTo = null;
         });
       }
@@ -462,6 +463,10 @@ class _ChatScreenState extends State<ChatScreen> {
         setState(() {
           _isRecording = false;
         });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Voice send failed: $e')),
+        );
       }
     }
   }
@@ -555,7 +560,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
       final messages =
       await ApiService
-          .getMessages(id);
+          .getMessages(id, limit: 100);
 
       if (!mounted) return;
 
@@ -611,7 +616,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     try {
-      await ApiService.sendImage(
+      final sent = await ApiService.sendImage(
         conversationId,
         image,
         replyToId: _replyTo?.id,
@@ -619,6 +624,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
       if (mounted) {
         setState(() {
+          _upsertMessage(sent);
           _replyTo = null;
         });
       }
@@ -630,6 +636,11 @@ class _ChatScreenState extends State<ChatScreen> {
       debugPrint(
         'Upload failed: $e',
       );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Image upload failed: $e')),
+        );
+      }
     }
   }
 
@@ -700,7 +711,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (conversationId == null) return;
 
     try {
-      await ApiService.sendVideo(
+      final sent = await ApiService.sendVideo(
         conversationId,
         video,
         replyToId: _replyTo?.id,
@@ -708,6 +719,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
       if (mounted) {
         setState(() {
+          _upsertMessage(sent);
           _replyTo = null;
         });
       }
@@ -1171,8 +1183,7 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() => _messages.add(local));
     }
 
-    SocketService.instance
-        .sendMessage(
+    _sendViaSocketWithFallback(
       conversationId: id,
       text: text,
       replyToId: replyId,
@@ -1188,6 +1199,71 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _replyTo = null;
       });
+    }
+  }
+
+  /// Send the message over the socket and, if the server never confirms it
+  /// (rejected ack or timed-out connection), fall back to the REST endpoint
+  /// so the text is persisted and survives a reopen. If that also fails the
+  /// message enters the persistent offline queue and retries on reconnect.
+  Future<void> _sendViaSocketWithFallback({
+    required String conversationId,
+    required String text,
+    String? replyToId,
+    required String clientId,
+  }) async {
+    final completer = Completer<bool>();
+
+    SocketService.instance.sendMessage(
+      conversationId: conversationId,
+      text: text,
+      replyToId: replyToId,
+      clientId: clientId,
+      onResult: (ok, _) {
+        if (completer.isCompleted) return;
+        completer.complete(ok);
+      },
+    );
+
+    bool ok;
+    try {
+      ok = await completer.future.timeout(
+        const Duration(seconds: 10),
+      );
+    } catch (_) {
+      ok = false;
+    }
+
+    if (ok) return;
+
+    try {
+      final sent = await ApiService.sendMessage(
+        conversationId,
+        text: text,
+        replyToId: replyToId,
+        clientId: clientId,
+      );
+      if (mounted) {
+        setState(() {
+          _upsertMessage(sent);
+        });
+      }
+    } catch (e) {
+      debugPrint('REST send fallback failed: $e');
+      OfflineQueue.instance.enqueue(PendingMessage(
+        id: clientId,
+        conversationId: conversationId,
+        text: text,
+        replyToId: replyToId,
+        createdAt: DateTime.now(),
+      ));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Message queued — will retry when connection recovers'),
+          ),
+        );
+      }
     }
   }
 

@@ -22,6 +22,14 @@ class ApiService {
 
   static Uri _uri(String path) => Uri.parse('${ApiConfig.apiUrl}$path');
 
+  /// Basename of a file path regardless of platform separator. On native
+  /// platforms `XFile.name` may return the full path instead of the file
+  /// name, so always derive the name sent to the server from the path.
+  static String _baseName(String path) {
+    final normalized = path.replaceAll(r'\', '/');
+    return normalized.substring(normalized.lastIndexOf('/') + 1);
+  }
+
   static dynamic _decode(http_orig.Response res) {
     final body = res.body.isEmpty ? {} : jsonDecode(res.body);
     if (res.statusCode >= 200 && res.statusCode < 300) return body;
@@ -67,7 +75,7 @@ class ApiService {
     required List<String> members,
     XFile? image,
   }) async {
-    final request = http.MultipartRequest(
+    final request = http_orig.MultipartRequest(
 
       'POST',
 
@@ -87,12 +95,9 @@ class ApiService {
 
         request.files.add(
 
-          http.MultipartFile.fromBytes(
-
+          http_orig.MultipartFile.fromBytes(
             'image',
-
             bytes,
-
             filename: image.name,
 
           ),
@@ -101,11 +106,13 @@ class ApiService {
       } else {
         request.files.add(
 
-          await http.MultipartFile.fromPath(
+          await http_orig.MultipartFile.fromPath(
 
             'image',
 
             image.path,
+
+            filename: _baseName(image.path),
 
           ),
 
@@ -203,9 +210,13 @@ class ApiService {
 
   // ===== Messages =====
 
-  static Future<List<Message>> getMessages(String conversationId) async {
+  static Future<List<Message>> getMessages(
+    String conversationId, {
+    int? limit,
+  }) async {
+    final query = limit != null ? '?limit=$limit' : '';
     final res = await http.get(
-      _uri('/conversations/$conversationId/messages'),
+      _uri('/conversations/$conversationId/messages$query'),
       headers: _headers,
     );
     final body = _decode(res) as Map<String, dynamic>;
@@ -222,6 +233,7 @@ class ApiService {
     String? callUrl,
     String? replyToId,
     String? forwardedFrom,
+    String? clientId,
   }) async {
     final res = await http.post(
       _uri('/conversations/$conversationId/messages'),
@@ -232,6 +244,7 @@ class ApiService {
         'callUrl': ?callUrl,
         'replyToId': ?replyToId,
         'forwardedFrom': ?forwardedFrom,
+        'clientId': ?clientId,
       }),
     );
     final body = _decode(res) as Map<String, dynamic>;
@@ -243,7 +256,7 @@ class ApiService {
       XFile image, {
         String? replyToId,
       }) async {
-    final request = http.MultipartRequest(
+    final request = http_orig.MultipartRequest(
       'POST',
       _uri('/conversations/$conversationId/messages/image'),
     );
@@ -261,17 +274,18 @@ class ApiService {
       Uint8List bytes = await image.readAsBytes();
 
       request.files.add(
-        http.MultipartFile.fromBytes(
-          'image',
-          bytes,
-          filename: image.name,
+        http_orig.MultipartFile.fromBytes(
+            'image',
+            bytes,
+            filename: image.name,
         ),
       );
     } else {
       request.files.add(
-        await http.MultipartFile.fromPath(
+        await http_orig.MultipartFile.fromPath(
           'image',
           image.path,
+          filename: _baseName(image.path),
         ),
       );
     }
@@ -402,7 +416,7 @@ class ApiService {
     required String conversationId,
     required XFile image,
   }) async {
-    final request = http.MultipartRequest(
+    final request = http_orig.MultipartRequest(
       "PATCH",
       _uri("/conversations/$conversationId/image"),
     );
@@ -416,7 +430,7 @@ class ApiService {
       final bytes = await image.readAsBytes();
 
       request.files.add(
-        http.MultipartFile.fromBytes(
+        http_orig.MultipartFile.fromBytes(
           "image",
           bytes,
           filename: image.name,
@@ -424,9 +438,10 @@ class ApiService {
       );
     } else {
       request.files.add(
-        await http.MultipartFile.fromPath(
+        await http_orig.MultipartFile.fromPath(
           "image",
           image.path,
+          filename: _baseName(image.path),
         ),
       );
     }
@@ -482,7 +497,7 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> updateAvatar(XFile image,) async {
-    final request = http.MultipartRequest(
+    final request = http_orig.MultipartRequest(
       'PUT',
       _uri('/users/avatar'),
     );
@@ -496,7 +511,7 @@ class ApiService {
       final bytes = await image.readAsBytes();
 
       request.files.add(
-        http.MultipartFile.fromBytes(
+        http_orig.MultipartFile.fromBytes(
           'avatar',
           bytes,
           filename: image.name,
@@ -504,9 +519,10 @@ class ApiService {
       );
     } else {
       request.files.add(
-        await http.MultipartFile.fromPath(
+        await http_orig.MultipartFile.fromPath(
           'avatar',
           image.path,
+          filename: _baseName(image.path),
         ),
       );
     }
@@ -544,7 +560,7 @@ class ApiService {
       {
         String? replyToId,
       }) async {
-    final request = http.MultipartRequest(
+    final request = http_orig.MultipartRequest(
       'POST',
       _uri('/conversations/$conversationId/messages/voice'),
     );
@@ -563,7 +579,7 @@ class ApiService {
       final bytes = await audio.readAsBytes();
 
       request.files.add(
-        http.MultipartFile.fromBytes(
+        http_orig.MultipartFile.fromBytes(
           'voice',
           bytes,
           filename: "voice.m4a",
@@ -572,9 +588,10 @@ class ApiService {
       );
     } else {
       request.files.add(
-        await http.MultipartFile.fromPath(
+        await http_orig.MultipartFile.fromPath(
           'voice',
           audio.path,
+          filename: _baseName(audio.path),
         ),
       );
     }
@@ -604,7 +621,7 @@ class ApiService {
     XFile file, {
     String? replyToId,
   }) async {
-    final request = http.MultipartRequest(
+    final request = http_orig.MultipartRequest(
       'POST',
       _uri('/conversations/$conversationId/messages/file'),
     );
@@ -621,18 +638,18 @@ class ApiService {
     if (kIsWeb) {
       final bytes = await file.readAsBytes();
       request.files.add(
-        http.MultipartFile.fromBytes(
+        http_orig.MultipartFile.fromBytes(
           'file',
           bytes,
-          filename: file.name,
+          filename: _baseName(file.path),
         ),
       );
     } else {
       request.files.add(
-        await http.MultipartFile.fromPath(
+        await http_orig.MultipartFile.fromPath(
           'file',
           file.path,
-          filename: file.name,
+          filename: _baseName(file.path),
         ),
       );
     }
@@ -658,7 +675,7 @@ class ApiService {
     XFile video, {
     String? replyToId,
   }) async {
-    final request = http.MultipartRequest(
+    final request = http_orig.MultipartRequest(
       'POST',
       _uri('/conversations/$conversationId/messages/video'),
     );
@@ -675,18 +692,18 @@ class ApiService {
     if (kIsWeb) {
       final bytes = await video.readAsBytes();
       request.files.add(
-        http.MultipartFile.fromBytes(
+        http_orig.MultipartFile.fromBytes(
           'video',
           bytes,
-          filename: video.name,
+          filename: _baseName(video.path),
         ),
       );
     } else {
       request.files.add(
-        await http.MultipartFile.fromPath(
+        await http_orig.MultipartFile.fromPath(
           'video',
           video.path,
-          filename: video.name,
+          filename: _baseName(video.path),
         ),
       );
     }
@@ -980,7 +997,7 @@ class FriendlyHttpClient extends http_orig.BaseClient {
   @override
   Future<http_orig.StreamedResponse> send(http_orig.BaseRequest request) async {
     try {
-      return await _inner.send(request).timeout(const Duration(seconds: 15));
+      return await _inner.send(request).timeout(const Duration(seconds: 60));
     } catch (e) {
       throw ApiException(
         503,
@@ -998,14 +1015,6 @@ class http {
   static Future<http_orig.Response> put(Uri url, {Map<String, String>? headers, Object? body, Encoding? encoding}) => _inner.put(url, headers: headers, body: body, encoding: encoding);
   static Future<http_orig.Response> patch(Uri url, {Map<String, String>? headers, Object? body, Encoding? encoding}) => _inner.patch(url, headers: headers, body: body, encoding: encoding);
   static Future<http_orig.Response> delete(Uri url, {Map<String, String>? headers, Object? body, Encoding? encoding}) => _inner.delete(url, headers: headers, body: body, encoding: encoding);
-
-  // Helper to construct a MultipartRequest
-  static http_orig.MultipartRequest MultipartRequest(String method, Uri url) {
-    return http_orig.MultipartRequest(method, url);
-  }
-
-  // Delegate for MultipartFile
-  static get MultipartFile => http_orig.MultipartFile;
 
   // Custom proxy send method
   static Future<http_orig.StreamedResponse> send(http_orig.BaseRequest request) {

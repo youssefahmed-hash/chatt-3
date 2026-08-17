@@ -8,7 +8,7 @@ import { Reaction } from '../models/Reaction.js';
 import { Call } from '../models/Call.js';
 import { verifyToken } from '../utils/token.js';
 import { createMessage, serializeMessage, assertParticipant } from '../services/message.service.js';
-import { setIO, userRoom, emitToUsers } from './io.js';
+import { setIO, userRoom, emitToUsers, emitToUsersPerViewer } from './io.js';
 
 // Group message-type -> call type mapping for call history.
 function callTypeFor(type) {
@@ -112,9 +112,17 @@ export function initSocket(httpServer) {
         }
 
         const serialized = await serializeMessage(message, userId);
-        emitToUsers(conversation.userIds, 'message:edited', {
-          conversationId: String(conversationId),
-          message: serialized,
+        // Serialize per viewer so reaction/read state matches each device's own
+        // perspective; the sender's own view is reused for the ack below.
+        await emitToUsersPerViewer(conversation.userIds, 'message:edited', async (viewerId) => {
+          const viewerMessage =
+            String(viewerId) === String(userId)
+              ? serialized
+              : await serializeMessage(message, viewerId);
+          return {
+            conversationId: String(conversationId),
+            message: viewerMessage,
+          };
         });
 
         ack?.({ ok: true, message: serialized });

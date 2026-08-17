@@ -7,7 +7,7 @@ import { Message } from '../models/Message.js';
 import { Conversation } from '../models/Conversation.js';
 import { Reaction } from '../models/Reaction.js';
 import { StarredMessage } from '../models/StarredMessage.js';
-import { emitToUsers } from '../realtime/io.js';
+import { emitToUsers, emitToUsersPerViewer } from '../realtime/io.js';
 import { ApiError } from '../utils/ApiError.js';
 
 
@@ -17,6 +17,7 @@ export const sendMessageSchema = z.object({
   callUrl: z.string().url('callUrl must be a valid URL').nullable().optional(),
   replyToId: z.string().uuid().nullable().optional(),
   forwardedFrom: z.string().uuid().nullable().optional(),
+  clientId: z.string().max(100).nullable().optional(),
 });
 
 export const sendImageMessage = asyncHandler(async (req, res) => {
@@ -50,6 +51,7 @@ export const sendMessage = asyncHandler(async (req, res) => {
     callUrl: req.body.callUrl || null,
     replyToId: req.body.replyToId || null,
     forwardedFrom: req.body.forwardedFrom || null,
+    clientId: req.body.clientId || null,
   });
 
   res.status(201).json({ message });
@@ -191,9 +193,15 @@ export const editMessage = asyncHandler(async (req, res) => {
 
   const serialized = await serializeMessage(message, req.user.id);
 
-  emitToUsers(conversation.userIds, 'message:edited', {
-    conversationId: String(id),
-    message: serialized,
+  await emitToUsersPerViewer(conversation.userIds, 'message:edited', async (viewerId) => {
+    const viewerMessage =
+      String(viewerId) === String(req.user.id)
+        ? serialized
+        : await serializeMessage(message, viewerId);
+    return {
+      conversationId: String(id),
+      message: viewerMessage,
+    };
   });
 
   res.json({ message: serialized });

@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'session.dart';
 import 'socket_service.dart';
 
 /// A text message queued locally while the user is offline.
@@ -12,6 +13,9 @@ class PendingMessage {
   final String text;
   final DateTime createdAt;
   final String? replyToId;
+  /// User whose identity owns this queued message. A message must never be
+  /// delivered under a different account on the same device.
+  final String? userId;
 
   const PendingMessage({
     required this.id,
@@ -19,6 +23,7 @@ class PendingMessage {
     required this.text,
     required this.createdAt,
     this.replyToId,
+    this.userId,
   });
 
   Map<String, dynamic> toJson() => {
@@ -27,6 +32,7 @@ class PendingMessage {
         'text': text,
         'createdAt': createdAt.toIso8601String(),
         'replyToId': ?replyToId,
+        'userId': userId,
       };
 
   factory PendingMessage.fromJson(Map<String, dynamic> json) =>
@@ -37,6 +43,7 @@ class PendingMessage {
         createdAt:
             DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
         replyToId: json['replyToId']?.toString(),
+        userId: json['userId']?.toString(),
       );
 }
 
@@ -85,7 +92,26 @@ class OfflineQueue {
 
   /// Add a message to the tail of the queue (persisted).
   Future<void> enqueue(PendingMessage message) async {
-    _queue.add(message);
+    // Stamp ownership as the identity active right now, so a message recorded
+    // for one account can never be flushed as another later.
+    final owned = message.userId == null || message.userId!.isEmpty
+        ? PendingMessage(
+            id: message.id,
+            conversationId: message.conversationId,
+            text: message.text,
+            createdAt: message.createdAt,
+            replyToId: message.replyToId,
+            userId: Session.userId,
+          )
+        : message;
+    _queue.add(owned);
+    await _persist();
+  }
+
+  /// Remove every queued message (e.g. on logout) so a pending message from a
+  /// signed-out identity is never delivered after the next login.
+  Future<void> clear() async {
+    _queue.clear();
     await _persist();
   }
 
@@ -105,6 +131,13 @@ class OfflineQueue {
       // Snapshot so removals don't disturb iteration.
       final snapshot = List<PendingMessage>.from(_queue);
       for (final msg in snapshot) {
+        final owner = Session.userId;
+        // Never deliver a queued message under a different identity than the
+        // one that created it (e.g. after an account switch on this device).
+        if (owner == null || msg.userId != owner) {
+          await remove(msg.id);
+          continue;
+        }
         await _sendOne(msg);
       }
     } finally {

@@ -24,3 +24,15 @@ export function emitToUsers(userIds, event, payload) {
     ioRef.to(userRoom(id)).emit(event, payload);
   }
 }
+
+// Emit an event where each recipient receives a payload serialized from their
+// own point of view (e.g. message:new) instead of one sender-view payload for
+// everyone. This keeps the socket payload identical to what the same user's
+// REST reload would return for the same message.
+export async function emitToUsersPerViewer(userIds, event, payloadFor) {
+  if (!ioRef) return;
+  for (const id of userIds) {
+    const payload = await payloadFor(id);
+    ioRef.to(userRoom(id)).emit(event, payload);
+  }
+}

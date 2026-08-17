@@ -3,7 +3,7 @@ import { Message } from '../models/Message.js';
 import { User } from '../models/User.js';
 import { Reaction } from '../models/Reaction.js';
 import { ApiError } from '../utils/ApiError.js';
-import { emitToUsers } from '../realtime/io.js';
+import { emitToUsersPerViewer } from '../realtime/io.js';
 
 export async function getOrCreateConversation(userIdA, userIdB) {
   if (String(userIdA) === String(userIdB)) {
@@ -138,6 +138,18 @@ export async function createMessage({
     }
   }
 
+  // Idempotency: a retry (socket ack lost, REST fallback, offline flush)
+  // carrying the same client id of the same sender must never create a
+  // duplicate row. Return the already-persisted message instead.
+  if (clientId) {
+    const existing = await Message.findOne({
+      where: { senderId, clientId },
+    });
+    if (existing) {
+      return await serializeMessage(existing, senderId);
+    }
+  }
+
   let message = await Message.create({
     conversationId,
     senderId,
@@ -171,11 +183,23 @@ export async function createMessage({
   // consistent data.
   const serialized = await serializeMessage(message, senderId);
 
-  // Emit to both participants
-  emitToUsers(conversation.userIds, 'message:new', {
-    conversationId: String(conversation.id),
-    message: serialized,
-  });
+  // Echo to both participants, each with their own viewer so the payload a
+  // device parses (sender, myReactions, readBy) matches exactly what its own
+  // REST reload would return for this message.
+  await emitToUsersPerViewer(
+    conversation.userIds,
+    'message:new',
+    async (userId) => {
+      const viewerMessage =
+        String(userId) === String(senderId)
+          ? serialized
+          : await serializeMessage(message, userId);
+      return {
+        conversationId: String(conversation.id),
+        message: viewerMessage,
+      };
+    },
+  );
 
   return serialized;
 }
