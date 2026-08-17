@@ -185,6 +185,10 @@ class _OtpScreenState extends State<OtpScreen> {
 
                       userName: result["user"]["name"],
 
+                      role: result["user"]["role"] ?? "user",
+
+                      mustChangeCredentials: result["user"]["mustChangeCredentials"] == true,
+
                     );
 
                     SocketService.instance.connect();

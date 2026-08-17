@@ -5,6 +5,7 @@ import {
   login,
   me,
   verifyUserOtp,
+  changeCredentials,
   registerSchema,
   loginSchema,
   verifyOtpSchema,
@@ -35,6 +36,13 @@ router.post(
   '/login',
   validate(loginSchema),
   login,
+);
+
+// Change Credentials (Admin only)
+router.post(
+  '/change-credentials',
+  protect,
+  changeCredentials,
 );
 
 // Current User

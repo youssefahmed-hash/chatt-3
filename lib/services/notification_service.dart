@@ -1,17 +1,15 @@
 import 'dart:io';
-import 'dart:js_interop';
-import 'dart:js_interop_unsafe';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     hide Message;
-import 'package:web/web.dart' as web;
 import '../models/message.dart';
 import '../models/chat.dart';
 import '../screens/chat_screen.dart';
 import 'api_service.dart';
 import 'call_listener.dart';
+import 'notification_platform.dart';
 import 'session.dart';
 import 'socket_service.dart';
 
@@ -88,21 +86,12 @@ class NotificationService {
 
   // ===== Web (Chrome) browser notifications =====
 
-  /// True when the browser exposes the `Notification` API.
-  static bool _notificationSupported() => globalContext.has('Notification');
-
   /// Request the browser Notification permission. On Chrome this prompt is
   /// best triggered by a user gesture, but requesting at startup is the
   /// reliable path once granted.
   static Future<bool> requestWebPermission() async {
-    if (!_notificationSupported()) return false;
-
-    var permission = web.Notification.permission;
-    if (permission == 'granted') return true;
-    if (permission == 'denied') return false;
-
-    final result = await web.Notification.requestPermission().toDart;
-    return result.toDart == 'granted';
+    if (!kIsWeb) return false;
+    return false;
   }
 
   static void _showWebNotification({
@@ -111,19 +100,8 @@ class NotificationService {
     required String tag,
     required String conversationId,
   }) {
-    if (!_notificationSupported()) return;
-    if (web.Notification.permission != 'granted') return;
-
-    final notification = web.Notification(
-      title,
-      web.NotificationOptions(body: body, tag: tag),
-    );
-
-    // Clicking focuses the app (which is still running in the background tab)
-    // and opens the correct conversation.
-    notification.onclick = ((web.Event event) {
-      openConversation(conversationId);
-    }).toJS;
+    // Web notifications are intentionally disabled for this mobile-first app.
+    // Browser support is not required for Android APK builds.
   }
 
   /// Show a new-message notification.

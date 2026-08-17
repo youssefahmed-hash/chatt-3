@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../services/socket_service.dart';
+import '../services/session.dart';
+import '../config/api_config.dart';
 import 'chat_list_screen.dart';
 import 'register_screen.dart';
+import 'admin_dashboard_screen.dart';
+import 'force_change_credentials_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,48 +22,77 @@ class _LoginScreenState
 
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  final _domainCtrl = TextEditingController();
 
   bool _loading = false;
 
   String? _error;
 
   Future<void> _submit() async {
-
     setState(() {
-
       _loading = true;
-
       _error = null;
-
     });
 
-    try {
+    final rawDomain = _domainCtrl.text.trim();
+    if (rawDomain.isNotEmpty) {
+      await ApiConfig.setBaseUrl(rawDomain);
+    }
 
-      await AuthService.login(
+    final email = _emailCtrl.text.trim().toLowerCase();
+    final password = _passCtrl.text;
 
-        _emailCtrl.text.trim(),
+    final domain = ApiConfig.baseUrl.replaceAll("https://", "").replaceAll("http://", "");
+    final isInstalled = domain.contains('.') && !domain.contains("10.0.2.2") && !domain.contains("localhost");
 
-        _passCtrl.text,
-
+    // Local Bootstrap Login Bypass if server is not installed yet
+    if (!isInstalled && email == "admin@chatt.local" && password == "admin123") {
+      await Session.save(
+        token: "bootstrap_token",
+        userId: "bootstrap_admin_id",
+        userName: "Bootstrap Admin",
+        role: "admin",
+        mustChangeCredentials: false,
       );
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+      );
+      return;
+    }
+
+    try {
+      await AuthService.login(email, password);
 
       SocketService.instance.connect();
 
       if (!mounted) return;
 
-      Navigator.pushReplacement(
-
-        context,
-
-        MaterialPageRoute(
-
-          builder: (_) =>
-          const ChatListScreen(),
-
-        ),
-
-      );
-
+      if (Session.isAdmin) {
+        if (Session.mustChangeCredentials) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const ForceChangeCredentialsScreen(),
+            ),
+          );
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const AdminDashboardScreen(),
+            ),
+          );
+        }
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const ChatListScreen(),
+          ),
+        );
+      }
     } catch (e) {
 
       setState(() {
@@ -80,6 +113,14 @@ class _LoginScreenState
 
     }
 
+  }
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    _domainCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -132,6 +173,22 @@ class _LoginScreenState
                 ),
 
                 const SizedBox(height: 32),
+
+                TextField(
+
+                  controller: _domainCtrl,
+
+                  keyboardType: TextInputType.url,
+
+                  decoration: const InputDecoration(
+
+                    hintText: "Server domain (api.example.com)",
+
+                  ),
+
+                ),
+
+                const SizedBox(height: 12),
 
                 TextField(
 

@@ -276,7 +276,7 @@ class VoiceRecorderBar extends StatelessWidget {
             decoration:
             BoxDecoration(
               color:
-              color.withOpacity(.25),
+              color.withValues(alpha: .25),
 
               borderRadius:
               BorderRadius.circular(

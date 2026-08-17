@@ -27,3 +27,12 @@ export const protect = asyncHandler(async (req, _res, next) => {
   req.user = user;
   next();
 });
+
+export const adminOnly = (req, _res, next) => {
+  if (req.user && req.user.role === 'admin') {
+    next();
+  } else {
+    throw new ApiError(403, 'Access denied. Administrator privileges required.');
+  }
+};
+

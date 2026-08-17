@@ -127,3 +127,39 @@ export const verifyUserOtp = asyncHandler(async (req, res) => {
   });
 
 });
+
+// POST /api/auth/change-credentials
+export const changeCredentials = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+  const user = req.user;
+
+  if (user.role !== 'admin') {
+    throw new ApiError(403, 'Only administrators can perform this action');
+  }
+
+  if (!email || !password) {
+    throw new ApiError(400, 'Email and password are required');
+  }
+
+  // Check if email already in use
+  if (email.trim().toLowerCase() !== user.email.toLowerCase()) {
+    const exists = await User.findOne({ where: { email: email.trim().toLowerCase() } });
+    if (exists) {
+      throw new ApiError(409, 'Email/username already in use');
+    }
+    user.email = email.trim().toLowerCase();
+  }
+
+  if (password.length < 6) {
+    throw new ApiError(400, 'Password must be at least 6 characters');
+  }
+
+  user.passwordHash = password;
+  user.mustChangeCredentials = false;
+  await user.save();
+
+  res.json({
+    message: 'Credentials updated successfully',
+    user: user.toJSON(),
+  });
+});

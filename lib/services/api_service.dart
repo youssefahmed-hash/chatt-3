@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:http/http.dart' as http_orig;
 import '../models/group_member.dart';
 import '../config/api_config.dart';
 import '../models/chat.dart';
@@ -22,7 +22,7 @@ class ApiService {
 
   static Uri _uri(String path) => Uri.parse('${ApiConfig.apiUrl}$path');
 
-  static dynamic _decode(http.Response res) {
+  static dynamic _decode(http_orig.Response res) {
     final body = res.body.isEmpty ? {} : jsonDecode(res.body);
     if (res.statusCode >= 200 && res.statusCode < 300) return body;
     final msg = (body is Map && body['error'] != null)
@@ -113,7 +113,7 @@ class ApiService {
       }
     }
 
-    final response = await request.send();
+    final response = await http.send(request);
 
     final body = await response.stream.bytesToString();
 
@@ -155,6 +155,15 @@ class ApiService {
       String password) async {
     final res = await http.post(
       _uri('/auth/login'),
+      headers: _headers,
+      body: jsonEncode({'email': email, 'password': password}),
+    );
+    return _decode(res) as Map<String, dynamic>;
+  }
+
+  static Future<Map<String, dynamic>> changeCredentials(String email, String password) async {
+    final res = await http.post(
+      _uri('/auth/change-credentials'),
       headers: _headers,
       body: jsonEncode({'email': email, 'password': password}),
     );
@@ -220,9 +229,9 @@ class ApiService {
       body: jsonEncode({
         'text': text,
         'type': type.asString,
-        if (callUrl != null) 'callUrl': callUrl,
-        if (replyToId != null) 'replyToId': replyToId,
-        if (forwardedFrom != null) 'forwardedFrom': forwardedFrom,
+        'callUrl': ?callUrl,
+        'replyToId': ?replyToId,
+        'forwardedFrom': ?forwardedFrom,
       }),
     );
     final body = _decode(res) as Map<String, dynamic>;
@@ -267,8 +276,8 @@ class ApiService {
       );
     }
 
-    final streamedResponse = await request.send();
-    final response = await http.Response.fromStream(streamedResponse);
+    final streamedResponse = await http.send(request);
+    final response = await http_orig.Response.fromStream(streamedResponse);
 
     final body = _decode(response) as Map<String, dynamic>;
     final myId = Session.userId ?? '';
@@ -422,7 +431,7 @@ class ApiService {
       );
     }
 
-    final response = await request.send();
+    final response = await http.send(request);
 
     final body = await response.stream.bytesToString();
 
@@ -503,7 +512,7 @@ class ApiService {
     }
 
 
-    final response = await request.send();
+    final response = await http.send(request);
 
     final body =
     await response.stream.bytesToString();
@@ -571,8 +580,8 @@ class ApiService {
     }
 
 
-    final streamed = await request.send();
-    final response = await http.Response.fromStream(streamed);
+    final streamed = await http.send(request);
+    final response = await http_orig.Response.fromStream(streamed);
 
     final body = _decode(response) as Map<String, dynamic>;
     print(body);
@@ -628,8 +637,8 @@ class ApiService {
       );
     }
 
-    final streamed = await request.send();
-    final response = await http.Response.fromStream(streamed);
+    final streamed = await http.send(request);
+    final response = await http_orig.Response.fromStream(streamed);
 
     final body = _decode(response) as Map<String, dynamic>;
     final myId = Session.userId ?? '';
@@ -682,8 +691,8 @@ class ApiService {
       );
     }
 
-    final streamed = await request.send();
-    final response = await http.Response.fromStream(streamed);
+    final streamed = await http.send(request);
+    final response = await http_orig.Response.fromStream(streamed);
 
     final body = _decode(response) as Map<String, dynamic>;
     final myId = Session.userId ?? '';
@@ -918,8 +927,42 @@ class ApiService {
     final body = _decode(res) as Map<String, dynamic>;
     return (body['calls'] as List).cast<Map<String, dynamic>>();
   }
-}
 
+  // ===== Dynamic Settings =====
+  static Future<Map<String, dynamic>> getSettings() async {
+    final res = await http.get(
+      _uri('/settings'),
+      headers: _headers,
+    );
+    return _decode(res) as Map<String, dynamic>;
+  }
+
+  static Future<Map<String, dynamic>> updateSettings({
+    required String email,
+    String? password,
+    required String adminEmail,
+  }) async {
+    final res = await http.put(
+      _uri('/settings'),
+      headers: _headers,
+      body: jsonEncode({
+        'email': email,
+        if (password != null && password.isNotEmpty) 'password': password,
+        'adminEmail': adminEmail,
+      }),
+    );
+    return _decode(res) as Map<String, dynamic>;
+  }
+
+  static Future<Map<String, dynamic>> testOtp(String email) async {
+    final res = await http.post(
+      _uri('/settings/test-otp'),
+      headers: _headers,
+      body: jsonEncode({'email': email}),
+    );
+    return _decode(res) as Map<String, dynamic>;
+  }
+}
 
 class ApiException implements Exception {
   final int statusCode;
@@ -929,4 +972,43 @@ class ApiException implements Exception {
 
   @override
   String toString() => message;
+}
+
+class FriendlyHttpClient extends http_orig.BaseClient {
+  final http_orig.Client _inner = http_orig.Client();
+
+  @override
+  Future<http_orig.StreamedResponse> send(http_orig.BaseRequest request) async {
+    try {
+      return await _inner.send(request).timeout(const Duration(seconds: 15));
+    } catch (e) {
+      throw ApiException(
+        503,
+        "Unable to connect to the server. Please check the server URL and make sure the backend is running.",
+      );
+    }
+  }
+}
+
+class http {
+  static final _inner = FriendlyHttpClient();
+
+  static Future<http_orig.Response> get(Uri url, {Map<String, String>? headers}) => _inner.get(url, headers: headers);
+  static Future<http_orig.Response> post(Uri url, {Map<String, String>? headers, Object? body, Encoding? encoding}) => _inner.post(url, headers: headers, body: body, encoding: encoding);
+  static Future<http_orig.Response> put(Uri url, {Map<String, String>? headers, Object? body, Encoding? encoding}) => _inner.put(url, headers: headers, body: body, encoding: encoding);
+  static Future<http_orig.Response> patch(Uri url, {Map<String, String>? headers, Object? body, Encoding? encoding}) => _inner.patch(url, headers: headers, body: body, encoding: encoding);
+  static Future<http_orig.Response> delete(Uri url, {Map<String, String>? headers, Object? body, Encoding? encoding}) => _inner.delete(url, headers: headers, body: body, encoding: encoding);
+
+  // Helper to construct a MultipartRequest
+  static http_orig.MultipartRequest MultipartRequest(String method, Uri url) {
+    return http_orig.MultipartRequest(method, url);
+  }
+
+  // Delegate for MultipartFile
+  static get MultipartFile => http_orig.MultipartFile;
+
+  // Custom proxy send method
+  static Future<http_orig.StreamedResponse> send(http_orig.BaseRequest request) {
+    return _inner.send(request);
+  }
 }

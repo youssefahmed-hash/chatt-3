@@ -4,16 +4,20 @@ import 'providers/profile_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/chat_list_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/admin_dashboard_screen.dart';
+import 'screens/force_change_credentials_screen.dart';
 import 'services/session.dart';
 import 'services/socket_service.dart';
 import 'services/call_listener.dart';
 import 'services/notification_service.dart';
 import 'services/offline_queue.dart';
+import 'config/api_config.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Restore saved login
+  // Restore dynamic API config and saved login
+  await ApiConfig.load();
   await Session.load();
 
   if (Session.isLoggedIn) {
@@ -236,7 +240,11 @@ class ChatApp extends StatelessWidget {
 
       // ================= START SCREEN =================
       home: Session.isLoggedIn
-          ? const ChatListScreen()
+          ? (Session.isAdmin
+              ? (Session.mustChangeCredentials
+                  ? const ForceChangeCredentialsScreen()
+                  : const AdminDashboardScreen())
+              : const ChatListScreen())
           : const LoginScreen(),
     );
   }

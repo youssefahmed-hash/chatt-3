@@ -638,21 +638,20 @@ class _ChatScreenState extends State<ChatScreen> {
   // ============================================================
 
   Future<void> pickFile() async {
-    // On web, file_picker exposes the contents in [PlatformFile.bytes], so
-    // request it with `withData` to build a web-compatible XFile.
-    final result = await FilePicker.pickFiles(
+    // file_picker v12 returns a List<PlatformFile> directly,
+    // not a FilePickerResult wrapper.
+    final files = await FilePicker.pickFiles(
       withData: kIsWeb,
       allowMultiple: false,
     );
 
-    if (result == null || result.files.isEmpty) return;
+    if (files.isEmpty) return;
 
-    final file = result.files.first;
+    final file = files.first;
 
     final XFile? xfile;
     if (kIsWeb) {
-      final bytes = file.bytes;
-      if (bytes == null) return;
+      final bytes = await file.readAsBytes();
       xfile = XFile.fromData(bytes, name: file.name);
     } else {
       final path = file.path;

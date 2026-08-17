@@ -54,8 +54,25 @@ class AuthService {
 
       userName: user["name"],
 
+      role: user["role"] ?? 'user',
+
+      mustChangeCredentials: user["mustChangeCredentials"] == true,
+
     );
 
+  }
+
+  static Future<void> changeCredentials(String email, String password) async {
+    final data = await ApiService.changeCredentials(email, password);
+    // Reload token and user info if needed
+    final user = data["user"] as Map<String, dynamic>;
+    await Session.save(
+      token: Session.token ?? '',
+      userId: user["id"].toString(),
+      userName: user["name"],
+      role: user["role"] ?? 'user',
+      mustChangeCredentials: false,
+    );
   }
 
 }

@@ -10,6 +10,8 @@ import uploadRoutes from './routes/upload.routes.js';
 import callRoutes from './routes/call.routes.js';
 import path from 'path';
 import testRoutes from './routes/test.routes.js';
+import settingsRoutes from './routes/settings.routes.js';
+
 export function createApp() {
   const app = express();
 
@@ -27,6 +29,7 @@ export function createApp() {
   app.use('/api/conversations', conversationRoutes);
   app.use('/api/calls', callRoutes);
   app.use('/api/test', testRoutes);
+  app.use('/api/settings', settingsRoutes);
 
   // 404 + central error handler (must be last).
   app.use(notFound);

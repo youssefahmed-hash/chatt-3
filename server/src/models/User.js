@@ -36,6 +36,15 @@ export const User = db.define('User', {
     type: DataTypes.DATE,
     defaultValue: null,
   },
+  role: {
+    type: DataTypes.STRING,
+    defaultValue: 'user',
+  },
+  mustChangeCredentials: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    field: 'must_change_credentials',
+  },
 }, {
   timestamps: true,
   underscored: true,
