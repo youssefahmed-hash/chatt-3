@@ -1,0 +1,48 @@
+في تطبيق ChatT المبني بـ Flutter مع Backend بـ Node.js/Express و PostgreSQL، يوجد خطأ عند محاولة إرسال أي ملف من التطبيق، سواء صورة أو فيديو أو Voice Record أو Folder/File.
+
+الخطأ الظاهر في Flutter:
+
+Voice send failed:
+NoSuchMethodError: Class 'Type' has no instance method 'fromPath' with matching arguments.
+
+Receiver: MultipartFile
+Tried calling:
+fromPath("voice", "/data/user/0/com.example.chatt/cache/1787005529378.m4a")
+
+Found:
+fromPath(String, String, {String? filename, MediaType? contentType})
+=> Future<MultipartFile>
+
+المشكلة الأساسية أن الكود يستدعي MultipartFile.fromPath بطريقة غير صحيحة، غالبًا بسبب استخدام MultipartFile من package مختلفة أو import غير صحيح، أو بسبب اختلاف API الخاصة بـ Dio/http.
+
+المطلوب:
+
+1. افحص كل كود إرسال الملفات في Flutter.
+2. حدد الـ MultipartFile المستخدم فعليًا والـ package التي جاء منها.
+3. صحح الـ imports بحيث يتم استخدام MultipartFile الصحيح والمتوافق مع HTTP client المستخدم في المشروع.
+4. أصلح طريقة إنشاء MultipartFile من path.
+5. تأكد أن إرسال:
+   - Images
+   - Videos
+   - Audio / Voice recordings
+   - Documents
+   - أي Files أخرى
+   يعمل بنفس الـ upload mechanism.
+6. لا تعمل workaround خاص بالـ Voice فقط؛ أصلح الـ file-upload architecture نفسها.
+7. تأكد أن الـ Multipart request متوافق مع Backend Node.js/Express الحالي.
+8. راجع endpoint الخاص بالـ upload وتأكد من أن اسم field المرسل من Flutter مطابق لما ينتظره Backend، مثل:
+   image / video / voice / file حسب تصميم المشروع.
+9. تأكد أن الـ Backend يستخدم multer أو الـ middleware المناسب لاستقبال multipart/form-data.
+10. بعد رفع الملف، يجب حفظ الـ file path/URL في PostgreSQL إذا كان النظام الحالي يعتمد على ذلك.
+11. يجب أن يعمل إرسال الرسائل النصية بدون مشاكل، وكذلك الرسائل التي تحتوي على media.
+12. لا تكسر الـ authentication أو الـ JWT أو Cloudflare API URL الحالي:
+   https://asaychattergobara.dpdns.org
+
+مهم جدًا:
+- لا تغير Database schema إلا إذا كان ذلك ضروريًا.
+- لا تحذف أي functionality موجودة.
+- افحص الكود الحالي أولًا قبل إجراء التعديلات.
+- لا تفترض أسماء ملفات أو classes غير موجودة؛ استخدم الملفات الموجودة في المشروع.
+- أصلح السبب الجذري للخطأ وليس مجرد إخفاء الـ exception.
+- أعطني في النهاية قائمة بالملفات التي تم تعديلها وسبب تعديل كل ملف.
+- اختبر جميع أنواع الملفات الأربعة: صورة، فيديو، صوت، وDocument/File.
