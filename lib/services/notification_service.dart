@@ -15,7 +15,8 @@ import '../models/chat.dart';
 import '../screens/chat_screen.dart';
 import 'api_service.dart';
 import 'call_listener.dart';
-import 'notification_web.dart' as notif_web;
+import 'notification_web_stub.dart'
+    if (dart.library.html) 'notification_web.dart' as notif_web;
 import 'session.dart';
 import 'socket_service.dart';
 
