@@ -22,6 +22,7 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback? onStar;
   final VoidCallback? onUnstar;
   final ValueChanged<String>? onReaction;
+  final ValueChanged<String>? onReactionDetails;
   final VoidCallback? onTapReply;
   final bool isPinned;
   final bool isStarred;
@@ -39,6 +40,7 @@ class MessageBubble extends StatelessWidget {
     this.onStar,
     this.onUnstar,
     this.onReaction,
+    this.onReactionDetails,
     this.onTapReply,
     this.isPinned = false,
     this.isStarred = false,
@@ -62,6 +64,14 @@ class MessageBubble extends StatelessWidget {
         onTap: () {
           Navigator.pop(context);
           onReply?.call();
+        },
+      ),
+      ListTile(
+        leading: const Icon(Icons.add_reaction_outlined),
+        title: Text(l10n.react),
+        onTap: () {
+          Navigator.pop(context);
+          onReaction?.call('');
         },
       ),
       ListTile(
@@ -411,6 +421,7 @@ class MessageBubble extends StatelessWidget {
                     myReactions: message.myReactions,
                     emojis: const [],
                     onTap: onReaction ?? (_) {},
+                    onLongTap: onReactionDetails,
                   ),
                 ),
             ],

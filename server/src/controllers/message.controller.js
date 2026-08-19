@@ -8,6 +8,7 @@ import { Conversation } from '../models/Conversation.js';
 import { Reaction } from '../models/Reaction.js';
 import { StarredMessage } from '../models/StarredMessage.js';
 import { emitToUsers, emitToUsersPerViewer } from '../realtime/io.js';
+import { sendPushToUsers } from '../services/push.service.js';
 import { ApiError } from '../utils/ApiError.js';
 
 
@@ -227,7 +228,9 @@ export const addReaction = asyncHandler(async (req, res) => {
   const conversation = await Conversation.findByPk(id);
   await assertParticipant(conversation, req.user.id);
 
-  // Upsert: no duplicate same-user + same-emoji reactions.
+  // WhatsApp semantics: ONE reaction per user per message. A different emoji
+  // replaces the previous one; the same emoji tap is a no-op (the client
+  // sends reaction:remove to take it back).
   const existing = await Reaction.findOne({
     where: {
       messageId,
@@ -238,6 +241,7 @@ export const addReaction = asyncHandler(async (req, res) => {
 
   let created = false;
   if (!existing) {
+    await Reaction.destroy({ where: { messageId, userId: req.user.id } });
     await Reaction.create({ messageId, userId: req.user.id, emoji });
     created = true;
   }
@@ -252,6 +256,20 @@ export const addReaction = asyncHandler(async (req, res) => {
       userId: String(req.user.id),
       reactions: serialized.reactions,
     });
+
+    // Reaction push notification for the message AUTHOR (web push reaches
+    // closed tabs; foreground devices get the socket event instead).
+    if (message.senderId && String(message.senderId) !== String(req.user.id)) {
+      const authorName = serialized.sender ? serialized.sender.name : null;
+      sendPushToUsers(
+        [String(message.senderId)],
+        {
+          title: authorName || 'Chatt',
+          body: `Reacted ${emoji}`,
+          data: { conversationId: String(id) },
+        },
+      ).catch(() => {});
+    }
   }
 
   res.json({ reactions: serialized.reactions });

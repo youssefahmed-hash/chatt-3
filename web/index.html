@@ -31,6 +31,29 @@
 
   <title>chatt</title>
   <link rel="manifest" href="manifest.json">
+
+  <script>
+    // Push notifications: register the service worker and tell it whether the
+    // tab is actually visible, so open tabs rely on the live socket while
+    // closed tabs receive real Web Push.
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/push-sw.js').catch((err) => {
+          console.warn('SW registration failed:', err);
+        });
+      });
+      const reportVisibility = () => {
+        if (navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({
+            type: 'VISIBILITY',
+            visible: !document.hidden,
+          });
+        }
+      };
+      document.addEventListener('visibilitychange', reportVisibility);
+      window.addEventListener('load', reportVisibility);
+    }
+  </script>
 </head>
 <body>
   <!--

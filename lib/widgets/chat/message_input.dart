@@ -919,64 +919,46 @@ class _MessageInputState
               ),
 
               // ====================================================
-              // SEND TEXT
+              // MIC / SEND (one slot: mic when no text, send otherwise)
               // ====================================================
 
               SizedBox(
                 width: 56,
-
-                child: _hasText
-                    ? IconButton(
-                  icon: Icon(
-                    widget.isEditing
-                        ? Icons.check
-                        : Icons.send,
-
-                    color: theme
-                        .colorScheme
-                        .secondary,
-                  ),
-
-                  onPressed: widget.isEditing
-                      ? widget.onEditingDone
-                      : widget.onSend,
-                )
-                    : const SizedBox(),
+                child: showMicButton
+                    ? MicButton(
+                        isRecording:
+                        widget.isRecording,
+                        dragX: _dragX,
+                        onTap: _handleTap,
+                        onLongPressStart:
+                        _handleLongPressStart,
+                        onLongPressMoveUpdate:
+                        _handleLongPressMove,
+                        onLongPressEnd:
+                        _handleLongPressEnd,
+                      )
+                    : _hasText
+                        ? IconButton(
+                            icon: Icon(
+                              widget.isEditing
+                                  ? Icons.check
+                                  : Icons.send,
+                              color: theme
+                                  .colorScheme
+                                  .secondary,
+                            ),
+                            onPressed:
+                                widget.isEditing
+                                    ? widget
+                                        .onEditingDone
+                                    : widget.onSend,
+                          )
+                        : const SizedBox(),
               ),
             ],
           ),
 
-          // ==========================================================
-          // LONG PRESS MIC
-          //
-          // ده اللي بيتحرك.
-          // ==========================================================
-
-          if (showMicButton)
-            Positioned(
-              right: 4,
-              bottom: 9.9,
-
-              child: MicButton(
-                isRecording:
-                widget.isRecording,
-
-                dragX: _dragX,
-
-                onTap:
-                _handleTap,
-
-                onLongPressStart:
-                _handleLongPressStart,
-
-                onLongPressMoveUpdate:
-                _handleLongPressMove,
-
-                onLongPressEnd:
-                _handleLongPressEnd,
-              ),
-            ),
-        ],
+          ],
       ),
     ],
   ),

@@ -222,6 +222,41 @@ class ApiService {
     return Chat.fromJson(body['conversation'] as Map<String, dynamic>);
   }
 
+  /// Pin a chat (appears at the top of the list, persisted server-side).
+  static Future<void> pinConversation(String id) async {
+    final res = await http.post(_uri('/conversations/$id/pin'), headers: _headers);
+    _decode(res);
+  }
+
+  static Future<void> unpinConversation(String id) async {
+    final res = await http.delete(_uri('/conversations/$id/pin'), headers: _headers);
+    _decode(res);
+  }
+
+  /// Fetch the Web Push VAPID public key AND register a push device token.
+  static Future<Map<String, dynamic>?> getPushConfig() async {
+    final res = await http.get(_uri('/devices/config'), headers: _headers);
+    return _decode(res) as Map<String, dynamic>?;
+  }
+
+  static Future<void> registerDevice(String token, String platform) async {
+    final res = await http.post(
+      _uri('/devices'),
+      headers: _headers,
+      body: jsonEncode({'token': token, 'platform': platform}),
+    );
+    _decode(res);
+  }
+
+  static Future<void> unregisterDevice(String token) async {
+    final res = await http.delete(
+      _uri('/devices'),
+      headers: _headers,
+      body: jsonEncode({'token': token}),
+    );
+    _decode(res);
+  }
+
   // ===== Messages =====
 
   static Future<List<Message>> getMessages(

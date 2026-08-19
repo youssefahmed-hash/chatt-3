@@ -38,11 +38,36 @@ class ReplyPreview {
   }
 }
 
+class ReactionUser {
+  final String id;
+  final String? name;
+  final String? avatarUrl;
+
+  const ReactionUser({
+    required this.id,
+    this.name,
+    this.avatarUrl,
+  });
+
+  static ReactionUser fromJson(Map<String, dynamic> json) => ReactionUser(
+    id: json['id']?.toString() ?? '',
+    name: json['name']?.toString(),
+    avatarUrl: json['avatarUrl']?.toString(),
+  );
+}
+
 class ReactionSummary {
   final int count;
   final List<String> userIds;
 
-  ReactionSummary({required this.count, required this.userIds});
+  /// Who reacted with this emoji (id, name, avatar) — WhatsApp-style details.
+  final List<ReactionUser> users;
+
+  ReactionSummary({
+    required this.count,
+    required this.userIds,
+    this.users = const [],
+  });
 
   bool isReactedBy(String userId) => userIds.contains(userId);
 }
@@ -168,6 +193,10 @@ class Message {
       reactions[emoji] = ReactionSummary(
         count: (v['count'] as num?)?.toInt() ?? 0,
         userIds: (v['userIds'] as List?)?.map((e) => e.toString()).toList() ?? [],
+        users: (v['users'] as List?)
+            ?.map((e) => ReactionUser.fromJson(e as Map<String, dynamic>))
+            .toList() ??
+            [],
       );
     });
 

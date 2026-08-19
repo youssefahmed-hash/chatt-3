@@ -42,6 +42,12 @@ export const env = {
   smtpEmail: required('SMTP_EMAIL'),
   smtpPass: required('SMTP_PASS'),
   adminEmail: required('ADMIN_EMAIL'),
+
+  // Web Push (VAPID). Optional: keys are generated once and cached in
+  // data/vapid.json when not provided.
+  vapidPublicKey: process.env.VAPID_PUBLIC_KEY || null,
+  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY || null,
+  vapidSubject: process.env.VAPID_SUBJECT || null,
 };
 
 export const isProd = env.nodeEnv === 'production';

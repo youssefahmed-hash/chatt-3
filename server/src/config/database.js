@@ -24,6 +24,7 @@ export async function connectDB() {
     await import('../models/Call.js');
     await import('../models/StarredMessage.js');
     await import('../models/SystemSetting.js');
+    await import('../models/Device.js');
 
     // Upgrade existing Postgres enums before sync runs.
     await ensureEnumValues();

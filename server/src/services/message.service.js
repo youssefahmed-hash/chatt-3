@@ -4,6 +4,7 @@ import { User } from '../models/User.js';
 import { Reaction } from '../models/Reaction.js';
 import { ApiError } from '../utils/ApiError.js';
 import { emitToUsersPerViewer } from '../realtime/io.js';
+import { sendPushToUsers } from './push.service.js';
 
 export async function getOrCreateConversation(userIdA, userIdB) {
   if (String(userIdA) === String(userIdB)) {
@@ -83,12 +84,38 @@ export async function serializeMessage(msg, viewerId) {
     where: { messageId: json.id },
     attributes: ['emoji', 'userId'],
   });
+
+  // Resolve one user record per distinct reactor so the client can label
+  // WHO reacted with WHAT (WhatsApp-style reaction details).
+  const reactorIds = [
+    ...new Set(reactions.map(r => String(r.userId))),
+  ];
+  const usersById = {};
+  if (reactorIds.length) {
+    const reactorUsers = await User.findAll({
+      where: { id: reactorIds },
+      attributes: ['id', 'name', 'avatarUrl'],
+    });
+    reactorUsers.forEach(u => {
+      usersById[String(u.id)] = u.toJSON();
+    });
+  }
+
   const reactionMap = {};
   for (const r of reactions) {
     const emoji = r.emoji;
-    reactionMap[emoji] = reactionMap[emoji] || { count: 0, userIds: [] };
+    if (!reactionMap[emoji]) {
+      reactionMap[emoji] = { count: 0, userIds: [], users: [] };
+    }
     reactionMap[emoji].count += 1;
     reactionMap[emoji].userIds.push(String(r.userId));
+    reactionMap[emoji].users.push(
+      usersById[String(r.userId)] || {
+        id: String(r.userId),
+        name: null,
+        avatarUrl: null,
+      },
+    );
   }
   json.reactions = reactionMap;
   json.myReactions = reactions
@@ -200,6 +227,19 @@ export async function createMessage({
       };
     },
   );
+
+  // Push to every other participant. Closed tabs receive the Web Push;
+  // open/foreground devices get the socket event above (and suppress the
+  // duplicate via the worker visibility flag).
+  const senderName = serialized.sender ? serialized.sender.name : null;
+  sendPushToUsers(
+    conversation.userIds.filter((u) => String(u) !== String(senderId)),
+    {
+      title: senderName || 'Chatt',
+      body: messagePreviewText(message),
+      data: { conversationId: String(conversation.id) },
+    },
+  ).catch(() => {});
 
   return serialized;
 }

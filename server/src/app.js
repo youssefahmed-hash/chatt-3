@@ -11,6 +11,7 @@ import callRoutes from './routes/call.routes.js';
 import path from 'path';
 import testRoutes from './routes/test.routes.js';
 import settingsRoutes from './routes/settings.routes.js';
+import deviceRoutes from './routes/device.routes.js';
 
 export function createApp() {
   const app = express();
@@ -30,6 +31,7 @@ export function createApp() {
   app.use('/api/calls', callRoutes);
   app.use('/api/test', testRoutes);
   app.use('/api/settings', settingsRoutes);
+  app.use('/api/devices', deviceRoutes);
 
   // 404 + central error handler (must be last).
   app.use(notFound);

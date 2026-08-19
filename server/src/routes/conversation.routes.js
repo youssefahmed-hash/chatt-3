@@ -19,6 +19,8 @@ import {
   pinMessage,
   unpinMessage,
   listPinnedMessages,
+  pinConversation,
+  unpinConversation,
   archiveConversation,
   unarchiveConversation,
   listArchivedConversations,
@@ -143,6 +145,10 @@ router.get('/starred', listStarredMessages);
 router.post('/:id/pins/:messageId', pinMessage);
 router.delete('/:id/pins/:messageId', unpinMessage);
 router.get('/:id/pins', listPinnedMessages);
+
+// Pin / unpin CHATS (per-user).
+router.post('/:id/pin', pinConversation);
+router.delete('/:id/pin', unpinConversation);
 
 // Archive / unarchive.
 router.post('/:id/archive', archiveConversation);

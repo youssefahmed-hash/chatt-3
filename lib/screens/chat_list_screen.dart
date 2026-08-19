@@ -101,12 +101,19 @@ class _ChatListScreenState extends State<ChatListScreen> {
     super.dispose();
   }
 
+    /// Pinned chats first (each group keeps its last-activity order).
+  List<Chat> _sortChats(List<Chat> chats) {
+    final pinned = chats.where((c) => c.pinned).toList();
+    final rest = chats.where((c) => !c.pinned).toList();
+    return [...pinned, ...rest];
+  }
+
   Future<void> _loadConversations() async {
     try {
       final chats = await ApiService.getConversations();
       if (!mounted) return;
       setState(() {
-        _chats = chats;
+        _chats = _sortChats(chats);
         _error = null;
         _loading = false;
       });
@@ -123,11 +130,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
   void _applySearch(String query) {
     setState(() {
       if (query.isEmpty) {
-        _filtered = _chats;
+        _filtered = _sortChats(List.from(_chats));
       } else {
-        _filtered = _chats
+        _filtered = _sortChats(_chats
             .where((c) => c.name.toLowerCase().contains(query.toLowerCase()))
-            .toList();
+            .toList());
       }
     });
   }
@@ -250,6 +257,25 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
   }
 
+    Future<void> _togglePin(Chat chat) async {
+    if (chat.id == null) return;
+    try {
+      if (chat.pinned) {
+        await ApiService.unpinConversation(chat.id!);
+      } else {
+        await ApiService.pinConversation(chat.id!);
+      }
+      if (!mounted) return;
+      setState(() {
+        chat.pinned = !chat.pinned;
+        _chats = _sortChats(List.from(_chats));
+        _applySearch(searchController.text);
+      });
+    } catch (e) {
+      _showSnack('Failed to ${chat.pinned ? 'unpin' : 'pin'}: $e');
+    }
+  }
+
   Future<void> _toggleArchive(Chat chat) async {
     if (chat.id == null) return;
     try {
@@ -261,6 +287,37 @@ class _ChatListScreenState extends State<ChatListScreen> {
     } catch (e) {
       _showSnack('Failed to archive: $e');
     }
+  }
+
+  /// Long-press menu: pin/unpin the chat or archive it.
+  void _showChatMenu(Chat chat) {
+    final l10n = AppLocalizations.of(context);
+    showModalBottomSheet(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(chat.pinned ? Icons.push_pin : Icons.push_pin_outlined),
+              title: Text(chat.pinned ? l10n.unpinChat : l10n.pinChat),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _togglePin(chat);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.archive_outlined),
+              title: Text(l10n.archiveChat),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _toggleArchive(chat);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showSnack(String msg) {
@@ -480,8 +537,40 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         : null,
                   ),
                 ),
-                const SizedBox(width: 6),
-                if (!chat.isGroup && chat.peerOnline)
+                if (chat.pinned) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.push_pin,
+                    size: 15,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ],
+                if (chat.isGroup) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 1,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .secondary
+                          .withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      AppLocalizations.of(context).groupLabel,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.secondary,
+                      ),
+                    ),
+                  ),
+                ],
+                if (!chat.isGroup && chat.peerOnline) ...[
+                  const SizedBox(width: 6),
                   Container(
                     width: 8,
                     height: 8,
@@ -490,6 +579,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                       shape: BoxShape.circle,
                     ),
                   ),
+                ],
               ],
             ),
             subtitle: Text(
@@ -540,7 +630,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 MaterialPageRoute(builder: (_) => ChatScreen(chat: chat)),
               ).then((_) => _loadConversations());
             },
-            onLongPress: () => _toggleArchive(chat),
+            onLongPress: () => _showChatMenu(chat),
           );
         },
       ),

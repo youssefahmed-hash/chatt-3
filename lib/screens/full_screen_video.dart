@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../config/api_config.dart';
 import '../l10n/generated/app_localizations.dart';
+import '../services/file_download.dart';
 
 /// Fullscreen video viewer opened when the user taps a video message.
 ///
@@ -27,9 +28,39 @@ class _FullScreenVideoState extends State<FullScreenVideo> {
   VideoPlayerController? _controller;
   bool _ready = false;
   bool _error = false;
+  bool _downloading = false;
 
   String _fullUrl(String path) =>
       path.startsWith('http') ? path : '${ApiConfig.baseUrl}$path';
+
+  Future<void> _download() async {
+    if (_downloading) return;
+    final l10n = AppLocalizations.of(context);
+    final fileName =
+        widget.url.split('/').last.split('?').first.trim();
+    final safeName = fileName.isEmpty ? 'video.mp4' : fileName;
+
+    setState(() => _downloading = true);
+    final saved = await downloadFile(
+      url: _fullUrl(widget.url),
+      fileName: safeName,
+      onProgress: (v) {
+        if (mounted) setState(() => _downloading = v);
+      },
+    );
+    if (mounted) setState(() => _downloading = false);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          saved == null
+              ? l10n.downloadFailed
+              : l10n.downloadSuccess(saved),
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -93,6 +124,25 @@ class _FullScreenVideoState extends State<FullScreenVideo> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
+        actions: [
+          _downloading
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  ),
+                )
+              : IconButton(
+                  icon: const Icon(Icons.download),
+                  tooltip: AppLocalizations.of(context).download,
+                  onPressed: _download,
+                ),
+        ],
       ),
       body: SafeArea(
         child: Center(

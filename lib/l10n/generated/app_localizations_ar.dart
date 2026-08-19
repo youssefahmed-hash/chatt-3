@@ -125,6 +125,15 @@ class AppLocalizationsAr extends AppLocalizations {
   String get unpinChat => 'إلغاء تثبيت المحادثة';
 
   @override
+  String get archiveChat => 'أرشفة المحادثة';
+
+  @override
+  String get groupLabel => 'جروب';
+
+  @override
+  String get react => 'تفاعل';
+
+  @override
   String get pinnedChat => 'مثبّتة';
 
   @override

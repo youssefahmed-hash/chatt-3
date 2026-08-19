@@ -326,6 +326,24 @@ abstract class AppLocalizations {
   /// **'Unpin Chat'**
   String get unpinChat;
 
+  /// No description provided for @archiveChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive Chat'**
+  String get archiveChat;
+
+  /// No description provided for @groupLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Group'**
+  String get groupLabel;
+
+  /// No description provided for @react.
+  ///
+  /// In en, this message translates to:
+  /// **'React'**
+  String get react;
+
   /// No description provided for @pinnedChat.
   ///
   /// In en, this message translates to:

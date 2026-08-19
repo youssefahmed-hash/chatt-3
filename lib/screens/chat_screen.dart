@@ -1350,6 +1350,22 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final already = message.myReactions.contains(emoji);
 
+    // WhatsApp semantics: one reaction per user per message. Adding a new
+    // emoji REPLACES the previous one locally (the server enforces the same),
+    // so the bubble updates instantly and the counter per emoji reflects the
+    // number of distinct people.
+    setState(() {
+      final idx = _messages.indexWhere((m) => m.id == message.id);
+      if (idx != -1) {
+        final m = _messages[idx];
+        _messages[idx] = already
+            ? m.copyWith(
+                myReactions: [...m.myReactions]..remove(emoji),
+              )
+            : m.copyWith(myReactions: [emoji]);
+      }
+    });
+
     if (already) {
       SocketService.instance.removeReaction(
         conversationId: id,
@@ -1365,30 +1381,130 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// WhatsApp picker: ONE reaction per user. Tapping an emoji places it on
+  /// the message (replacing any previous one of mine) and closes the sheet.
   void _showReactionPicker(Message message) {
     final theme = Theme.of(context);
 
     showModalBottomSheet(
       context: context,
       backgroundColor: theme.dialogTheme.backgroundColor,
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: _reactionEmojis.map((emoji) {
-              return GestureDetector(
-                onTap: () {
-                  Navigator.pop(context);
-                  _toggleReaction(message, emoji);
-                },
-                child: Text(
-                  emoji,
-                  style: const TextStyle(fontSize: 30),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          // Live message: local picker state falls back to server truth.
+          Message current = message;
+          for (final m in _messages) {
+            if (m.id == message.id) {
+              current = m;
+              break;
+            }
+          }
+          final active = current.myReactions.toSet();
+
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: _reactionEmojis.map((emoji) {
+                  final selected = active.contains(emoji);
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      _toggleReaction(current, emoji);
+                    },
+                    child: Container(
+                      width: 46,
+                      height: 46,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? theme.colorScheme.secondary
+                                .withValues(alpha: 0.25)
+                            : Colors.transparent,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        emoji,
+                        style: const TextStyle(fontSize: 30),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Bottom sheet listing WHO reacted with a given emoji.
+  void _showReactionDetails(Message message, String emoji) {
+    final theme = Theme.of(context);
+
+    Message current = message;
+    for (final m in _messages) {
+      if (m.id == message.id) {
+        current = m;
+        break;
+      }
+    }
+
+    final summary = current.reactions[emoji];
+    if (summary == null || summary.users.isEmpty) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: theme.dialogTheme.backgroundColor,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text(
+                '$emoji  ${summary.count}',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
                 ),
-              );
-            }).toList(),
-          ),
+              ),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: summary.users.length,
+                itemBuilder: (ctx, i) {
+                  final u = summary.users[i];
+                  final name = (u.name == null || u.name!.isEmpty)
+                      ? AppLocalizations.of(context).unknown
+                      : u.name!;
+                  return ListTile(
+                    dense: true,
+                    leading: CircleAvatar(
+                      radius: 16,
+                      backgroundColor: theme.colorScheme.secondary,
+                      child: Text(
+                        name[0].toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    title: Text(name),
+                    trailing: Text(
+                      emoji,
+                      style: const TextStyle(fontSize: 20),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
         ),
       ),
     );
@@ -2045,6 +2161,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
                     onReaction: (emoji) =>
                         _toggleReaction(message, emoji),
+
+                    onReactionDetails: (emoji) =>
+                        _showReactionDetails(message, emoji),
 
                     onTapReply: () =>
                         _tapReply(message),

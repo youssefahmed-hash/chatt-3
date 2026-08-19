@@ -12,6 +12,9 @@ class ReactionBar extends StatelessWidget {
   final List<String> emojis;
   final ValueChanged<String> onTap;
 
+  /// Long-press a reaction pill to see WHO reacted with it.
+  final ValueChanged<String>? onLongTap;
+
   /// Fallback quick reactions offered when no list is provided, so adding a
   /// first reaction is still possible via the [+] pill.
   static const _defaultEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -22,6 +25,7 @@ class ReactionBar extends StatelessWidget {
     required this.myReactions,
     required this.emojis,
     required this.onTap,
+    this.onLongTap,
   });
 
   @override
@@ -55,6 +59,9 @@ class ReactionBar extends StatelessWidget {
                   label: '${e.key} ${e.value.count}',
                   reacted: myReactions.contains(e.key),
                   onTap: () => onTap(e.key),
+                  onLongTap: onLongTap == null
+                      ? null
+                      : () => onLongTap!(e.key),
                 ),
               ),
               // Add-reaction pill: offers a first reaction on fresh messages.
@@ -76,10 +83,12 @@ class ReactionBar extends StatelessWidget {
     IconData? icon,
     bool reacted = false,
     required VoidCallback onTap,
+    VoidCallback? onLongTap,
   }) {
     final colors = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongTap,
       child: Container(
         padding: EdgeInsets.symmetric(
           horizontal: label != null ? 8 : 6,
@@ -99,7 +108,13 @@ class ReactionBar extends StatelessWidget {
           ),
         ),
         child: label != null
-            ? Text(label, style: const TextStyle(fontSize: 13))
+            ? Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              )
             : Icon(icon, size: 15),
       ),
     );

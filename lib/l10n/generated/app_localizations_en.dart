@@ -125,6 +125,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unpinChat => 'Unpin Chat';
 
   @override
+  String get archiveChat => 'Archive Chat';
+
+  @override
+  String get groupLabel => 'Group';
+
+  @override
+  String get react => 'React';
+
+  @override
   String get pinnedChat => 'Pinned';
 
   @override

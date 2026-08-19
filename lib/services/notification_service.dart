@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -11,23 +12,16 @@ import '../models/chat.dart';
 import '../screens/chat_screen.dart';
 import 'api_service.dart';
 import 'call_listener.dart';
+import 'notification_web.dart' as notif_web;
 import 'session.dart';
 import 'socket_service.dart';
 
-/// Foreground / basic background notifications.
+/// Foreground + background + closed-tab notifications.
 ///
-/// Displays a local notification for new messages. On iOS/Android the plugin
-/// also supports background delivery as long as the app has been launched at
-/// least once and the plugin is initialized; fully terminated-state delivery
-/// requires FCM, which is intentionally left out to keep the existing
-/// architecture untouched.
-///
-/// On Flutter Web (Chrome) the plugin has no web implementation, so this
-/// service routes through the browser [web.Notification] API instead: a
-/// notification is raised while the tab is open but hidden/minimized. Because
-/// a completely closed tab has no running Dart isolate (and no Web Push /
-/// VAPID infrastructure in this project), closed-browser delivery is NOT
-/// claimed.
+/// - Android/iOS (app open or backgrounded): flutter_local_notifications.
+/// - Web (tab open): browser [html.Notification].
+/// - Web (tab fully closed): Web Push via the registered service worker
+///   (push-sw.js) — the server pushes directly to every registered device.
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -46,7 +40,10 @@ class NotificationService {
 
     if (kIsWeb) {
       _initialized = true;
-      await requestWebPermission();
+      final granted = await requestWebPermission();
+      if (granted) {
+        unawaited(_initWebPush());
+      }
       return;
     }
 
@@ -94,13 +91,34 @@ class NotificationService {
 
   // ===== Web (Chrome) browser notifications =====
 
+  /// Fetch the server VAPID public key, subscribe the service worker and
+  /// register the device so the server can push when the tab is closed.
+  static Future<void> _initWebPush() async {
+    try {
+      final config = await ApiService.getPushConfig();
+      if (config == null) return;
+
+      final token = await notif_web.subscribeToWebPush(
+        config['publicKey']?.toString() ?? '',
+      );
+      if (token == null || token.isEmpty) return;
+
+      await ApiService.registerDevice(token, 'web');
+
+      notif_web.listenForWorkerMessages((conversationId) {
+        if (conversationId.isEmpty) return;
+        openConversation(conversationId);
+      });
+    } catch (e) {
+      debugPrint('Web push init error: $e');
+    }
+  }
+
   /// Request the browser Notification permission. On Chrome this prompt is
   /// best triggered by a user gesture, but requesting at startup is the
   /// reliable path once granted.
-  static Future<bool> requestWebPermission() async {
-    if (!kIsWeb) return false;
-    return false;
-  }
+  static Future<bool> requestWebPermission() =>
+      notif_web.requestWebPermission();
 
   static void _showWebNotification({
     required String title,
@@ -108,8 +126,13 @@ class NotificationService {
     required String tag,
     required String conversationId,
   }) {
-    // Web notifications are intentionally disabled for this mobile-first app.
-    // Browser support is not required for Android APK builds.
+    if (!notif_web.canShowWebNotification) return;
+    notif_web.showWebNotification(
+      title: title,
+      body: body,
+      tag: tag,
+      conversationId: conversationId,
+    );
   }
 
   /// Show a new-message notification.

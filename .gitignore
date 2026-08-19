@@ -46,3 +46,6 @@ app.*.map.json
 
 server/logs.out
 server/logs.err
+
+# Generated VAPID push keys (regenerated on first server run)
+server/data/

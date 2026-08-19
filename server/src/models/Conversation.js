@@ -84,6 +84,14 @@ export const Conversation = db.define(
       defaultValue: [],
       field: 'archived_by',
     },
+
+    // مستخدمو المحادثة الذين ثبّتوها (يُعاد ترتيبها أعلى قائمة الشات)
+    pinnedBy: {
+      type: DataTypes.ARRAY(DataTypes.UUID),
+      allowNull: false,
+      defaultValue: [],
+      field: 'pinned_by',
+    },
   },
   {
     timestamps: true,

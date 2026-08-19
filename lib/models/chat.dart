@@ -34,6 +34,8 @@ class Chat {
 
   int unreadCount;
 
+  bool pinned;
+
   Chat({
     this.id,
     this.peerId,
@@ -51,6 +53,7 @@ class Chat {
     this.peerLastSeen,
     this.unreadCount = 0,
     this.lastMessageSender,
+    this.pinned = false,
   });
 
   factory Chat.fromJson(Map<String, dynamic> json) {
@@ -59,17 +62,33 @@ class Chat {
     final isGroup = json['isGroup'] == true;
 
     if (isGroup) {
+      final membersList = (json['members'] as List?)
+          ?.map((e) => GroupMember.fromJson(
+        e as Map<String, dynamic>,
+      ))
+          .toList() ??
+          [];
+
+      final rawSender = last?['sender']?.toString();
+      var senderName = last?['senderName']?.toString();
+      if ((senderName == null || senderName.isEmpty) &&
+          rawSender != null) {
+        // Old servers only send the sender id; resolve the name from the
+        // member list included in the same payload.
+        for (final m in membersList) {
+          if (m.id == rawSender) {
+            senderName = m.name;
+            break;
+          }
+        }
+      }
+
       return Chat(
         id: json['id']?.toString(),
         peerId: null,
         isGroup: true,
         groupImage: json['groupImage'],
-        members: (json['members'] as List?)
-            ?.map((e) => GroupMember.fromJson(
-          e as Map<String, dynamic>,
-        ))
-            .toList() ??
-            [],
+        members: membersList,
         admins: (json['admins'] as List?)
             ?.map((e) => e.toString())
             .toList() ??
@@ -77,7 +96,7 @@ class Chat {
         createdBy: json['createdBy']?.toString(),
         name: json['groupName'] ?? '',
         lastMessage: last?['text'] ?? '',
-        lastMessageSender: last?['sender']?.toString(),
+        lastMessageSender: senderName ?? rawSender,
         time: _formatTime(last?['at'] ?? json['updatedAt']),
         messages: [],
         pinnedMessageIds: (json['pinnedMessageIds'] as List?)
@@ -85,6 +104,7 @@ class Chat {
             .toList() ??
             [],
         unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
+        pinned: json['pinned'] == true,
       );
     }
 
@@ -98,7 +118,8 @@ class Chat {
       members: const [],
       name: peer?['name'] ?? '',
       lastMessage: last?['text'] ?? '',
-      lastMessageSender: last?['sender']?.toString(),
+      lastMessageSender: last?['senderName']?.toString() ??
+          last?['sender']?.toString(),
       time: _formatTime(last?['at'] ?? json['updatedAt']),
       messages: [],
       admins: const [],
@@ -110,6 +131,7 @@ class Chat {
       peerOnline: peer?['online'] == true,
       peerLastSeen: peer?['lastSeen']?.toString(),
       unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
+      pinned: json['pinned'] == true,
     );
   }
 

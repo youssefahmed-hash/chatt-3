@@ -58,6 +58,37 @@ export const listConversations = asyncHandler(async (req, res) => {
     }
   }
 
+// Resolve last-message sender names once (group previews read
+  // "Name: text"; direct chats show the preview text only).
+  const senderIds = [
+    ...new Set(
+      conversations
+        .map((c) => c.lastMessage && c.lastMessage.sender)
+        .filter(Boolean)
+        .map(String),
+    ),
+  ];
+  const senderNameById = {};
+  if (senderIds.length) {
+    const senders = await User.findAll({
+      where: { id: senderIds },
+      attributes: ['id', 'name'],
+    });
+    senders.forEach((u) => {
+      senderNameById[String(u.id)] = u.name;
+    });
+  }
+  const withSenderName = (lastMessage) => {
+    if (!lastMessage) return lastMessage;
+    const sender = lastMessage.sender
+      ? String(lastMessage.sender)
+      : null;
+    return {
+      ...lastMessage,
+      senderName: sender ? senderNameById[sender] || null : null,
+    };
+  };
+
 const shaped = await Promise.all(
   conversations.map(async (c) => {
 
@@ -80,9 +111,10 @@ const shaped = await Promise.all(
         members,
         admins: c.admins,
         createdBy: c.createdBy,
-        lastMessage: c.lastMessage,
+        lastMessage: withSenderName(c.lastMessage),
         updatedAt: c.updatedAt,
         archived: (c.archivedBy || []).includes(String(req.user.id)),
+        pinned: (c.pinnedBy || []).includes(String(req.user.id)),
         pinnedMessageIds: c.pinnedMessageIds || [],
         unreadCount: unreadCounts[String(c.id)] || 0,
       };
@@ -100,9 +132,10 @@ const shaped = await Promise.all(
       id: c.id,
       isGroup: false,
       peer: peer ? peer.toJSON() : null,
-      lastMessage: c.lastMessage,
+      lastMessage: withSenderName(c.lastMessage),
       updatedAt: c.updatedAt,
       archived: (c.archivedBy || []).includes(String(req.user.id)),
+      pinned: (c.pinnedBy || []).includes(String(req.user.id)),
       pinnedMessageIds: c.pinnedMessageIds || [],
       unreadCount: unreadCounts[String(c.id)] || 0,
     };
@@ -784,6 +817,40 @@ export const listPinnedMessages = asyncHandler(async (req, res) => {
   }
 
   res.json({ messages: ordered });
+});
+
+// ============================================================
+// PIN CHATS (per-user, appear at the top of the chat list)
+// ============================================================
+export const pinConversation = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const conversation = await Conversation.findByPk(id);
+  if (!conversation) throw new ApiError(404, 'Conversation not found');
+  await assertParticipant(conversation, req.user.id);
+
+  const pinnedBy = conversation.pinnedBy || [];
+  if (!pinnedBy.includes(String(req.user.id))) {
+    conversation.pinnedBy = [...pinnedBy, String(req.user.id)];
+    await conversation.save();
+  }
+
+  res.json({ pinned: true });
+});
+
+export const unpinConversation = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const conversation = await Conversation.findByPk(id);
+  if (!conversation) throw new ApiError(404, 'Conversation not found');
+  await assertParticipant(conversation, req.user.id);
+
+  conversation.pinnedBy = (conversation.pinnedBy || []).filter(
+    (u) => String(u) !== String(req.user.id),
+  );
+  await conversation.save();
+
+  res.json({ pinned: false });
 });
 
 // ============================================================

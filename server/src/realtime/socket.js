@@ -149,18 +149,24 @@ export function initSocket(httpServer) {
           return ack?.({ ok: false, error: 'Message not found' });
         }
 
+        // WhatsApp semantics: ONE reaction per user per message. Tapping a
+        // different emoji replaces the previous one (the old emoji count
+        // drops, the new one counts) — only the OTHER users' reactions keep
+        // their own emoji counters.
         const existing = await Reaction.findOne({
           where: { messageId, userId, emoji },
         });
-        let created = false;
+
+        let changed = false;
         if (!existing) {
+          await Reaction.destroy({ where: { messageId, userId } });
           await Reaction.create({ messageId, userId, emoji });
-          created = true;
+          changed = true;
         }
 
         const serialized = await serializeMessage(message, userId);
 
-        if (created) {
+        if (changed) {
           emitToUsers(conversation.userIds, 'reaction:added', {
             conversationId: String(conversationId),
             messageId: String(messageId),
