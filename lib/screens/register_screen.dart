@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/generated/app_localizations.dart';
 import '../services/auth_service.dart';
 import '../config/api_config.dart';
 import 'otp_screen.dart';
@@ -90,11 +91,12 @@ class _RegisterScreenState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
 
       appBar: AppBar(
-        title: const Text("Create Account"),
+        title: Text(l10n.register),
       ),
 
       body: Padding(
@@ -111,9 +113,9 @@ class _RegisterScreenState
 
               keyboardType: TextInputType.url,
 
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
 
-                hintText: "Server domain (api.example.com)",
+                hintText: l10n.serverDomain,
 
               ),
 
@@ -125,9 +127,9 @@ class _RegisterScreenState
 
               controller: _nameCtrl,
 
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
 
-                labelText: "Name",
+                labelText: l10n.name,
 
               ),
 
@@ -139,9 +141,9 @@ class _RegisterScreenState
 
               controller: _emailCtrl,
 
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
 
-                labelText: "Email",
+                labelText: l10n.email,
 
               ),
 
@@ -155,9 +157,9 @@ class _RegisterScreenState
 
               obscureText: true,
 
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
 
-                labelText: "Password",
+                labelText: l10n.password,
 
               ),
 
@@ -219,8 +221,8 @@ class _RegisterScreenState
                   color: Colors.white,
                 )
 
-                    : const Text(
-                  "Create Account",
+                    : Text(
+                  l10n.register,
                 ),
 
               ),

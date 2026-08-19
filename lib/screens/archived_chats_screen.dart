@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../models/chat.dart';
 import '../services/api_service.dart';
 import '../config/api_config.dart';
@@ -61,7 +62,7 @@ class _ArchivedChatsScreenState extends State<ArchivedChatsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Archived Chats'),
+        title: Text(AppLocalizations.of(context).archivedChats),
         backgroundColor: theme.appBarTheme.backgroundColor,
         foregroundColor: theme.appBarTheme.foregroundColor,
       ),
@@ -70,7 +71,7 @@ class _ArchivedChatsScreenState extends State<ArchivedChatsScreen> {
           : _error != null
           ? Center(child: Text('Could not load:\n$_error'))
           : _chats.isEmpty
-          ? const Center(child: Text('No archived chats'))
+          ? Center(child: Text(AppLocalizations.of(context).noArchivedChats))
           : ListView.builder(
               itemCount: _chats.length,
               itemBuilder: (context, index) {

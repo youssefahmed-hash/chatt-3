@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/generated/app_localizations.dart';
 import '../services/auth_service.dart';
 import '../services/socket_service.dart';
 import '../services/session.dart';
@@ -125,6 +126,7 @@ class _LoginScreenState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
 
@@ -180,10 +182,8 @@ class _LoginScreenState
 
                   keyboardType: TextInputType.url,
 
-                  decoration: const InputDecoration(
-
-                    hintText: "Server domain (api.example.com)",
-
+                  decoration: InputDecoration(
+                    hintText: l10n.serverDomain,
                   ),
 
                 ),
@@ -198,9 +198,9 @@ class _LoginScreenState
                   TextInputType.emailAddress,
 
                   decoration:
-                  const InputDecoration(
+                  InputDecoration(
 
-                    hintText: "Email",
+                    hintText: l10n.email,
 
                   ),
 
@@ -215,9 +215,9 @@ class _LoginScreenState
                   obscureText: true,
 
                   decoration:
-                  const InputDecoration(
+                  InputDecoration(
 
-                    hintText: "Password",
+                    hintText: l10n.password,
 
                   ),
 
@@ -293,8 +293,8 @@ class _LoginScreenState
 
                     )
 
-                        : const Text(
-                      "Login",
+                        : Text(
+                      l10n.login,
                     ),
 
                   ),
@@ -322,10 +322,8 @@ class _LoginScreenState
 
                   },
 
-                  child: const Text(
-
-                    "Create Account",
-
+                  child: Text(
+                    l10n.register,
                   ),
 
                 ),

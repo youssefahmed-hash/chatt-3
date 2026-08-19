@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:chatt/models/message.dart';
 import 'package:chatt/models/message_type.dart';
+import 'package:chatt/l10n/generated/app_localizations.dart';
 import 'package:chatt/widgets/chat/voice_recorder_bar.dart';
 
 import 'mic_button.dart';
@@ -837,8 +838,8 @@ class _MessageInputState
                                   child:
                                   Text(
                                     _isCanceling
-                                        ? 'Release to cancel'
-                                        : '← Swipe to cancel',
+                                        ? AppLocalizations.of(context).recordingCancelHint
+                                        : AppLocalizations.of(context).recordingSendHint,
 
                                     key:
                                     ValueKey(
@@ -1040,7 +1041,7 @@ class _MessageInputState
               children: [
                 Text(
                   reply.senderName == null || reply.senderName!.isEmpty
-                      ? 'Reply'
+                      ? AppLocalizations.of(context).reply
                       : reply.senderName!,
                   style: TextStyle(
                     fontSize: 12,
@@ -1095,7 +1096,7 @@ class _MessageInputState
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Editing message',
+              AppLocalizations.of(context).editingMessage,
               style: TextStyle(
                 fontSize: 13,
                 color: theme.textTheme.bodyLarge?.color,

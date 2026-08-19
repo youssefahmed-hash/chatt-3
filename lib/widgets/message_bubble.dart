@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../models/message.dart';
 import '../models/message_type.dart';
 import 'call_message_card.dart';
@@ -52,11 +53,12 @@ class MessageBubble extends StatelessWidget {
 
   void _showActions(BuildContext context, {required bool isMe}) {
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
 
     final actions = <Widget>[
       ListTile(
         leading: const Icon(Icons.reply),
-        title: const Text('Reply'),
+        title: Text(l10n.reply),
         onTap: () {
           Navigator.pop(context);
           onReply?.call();
@@ -64,7 +66,7 @@ class MessageBubble extends StatelessWidget {
       ),
       ListTile(
         leading: const Icon(Icons.forward),
-        title: const Text('Forward'),
+        title: Text(l10n.forward),
         onTap: () {
           Navigator.pop(context);
           onForward?.call();
@@ -72,7 +74,7 @@ class MessageBubble extends StatelessWidget {
       ),
       ListTile(
         leading: Icon(isStarred ? Icons.star : Icons.star_border),
-        title: Text(isStarred ? 'Unstar' : 'Star'),
+        title: Text(isStarred ? l10n.unstar : l10n.star),
         onTap: () {
           Navigator.pop(context);
           (isStarred ? onUnstar : onStar)?.call();
@@ -81,7 +83,7 @@ class MessageBubble extends StatelessWidget {
       if (canPin)
         ListTile(
           leading: Icon(isPinned ? Icons.push_pin : Icons.push_pin_outlined),
-          title: Text(isPinned ? 'Unpin' : 'Pin'),
+          title: Text(isPinned ? l10n.unpin : l10n.pin),
           onTap: () {
             Navigator.pop(context);
             (isPinned ? onUnpin : onPin)?.call();
@@ -90,7 +92,7 @@ class MessageBubble extends StatelessWidget {
       if (isMe && message.type == MessageType.text)
         ListTile(
           leading: const Icon(Icons.edit_outlined),
-          title: const Text('Edit'),
+          title: Text(l10n.edit),
           onTap: () {
             Navigator.pop(context);
             onEdit?.call();
@@ -99,7 +101,7 @@ class MessageBubble extends StatelessWidget {
       if (isMe)
         ListTile(
           leading: const Icon(Icons.delete_outline, color: Colors.red),
-          title: const Text('Delete', style: TextStyle(color: Colors.red)),
+          title: Text(l10n.delete, style: const TextStyle(color: Colors.red)),
           onTap: () {
             Navigator.pop(context);
             _confirmDelete(context);
@@ -121,20 +123,19 @@ class MessageBubble extends StatelessWidget {
 
   void _confirmDelete(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
 
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: theme.dialogTheme.backgroundColor,
-        title: const Text("Delete Message"),
-        content: const Text(
-          "Are you sure you want to delete this message?",
-        ),
+        title: Text(l10n.deleteMessage),
+        content: Text(l10n.deleteMessageConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text(
-              "Cancel",
+              l10n.cancel,
               style: TextStyle(
                 color: theme.colorScheme.secondary,
               ),
@@ -145,9 +146,9 @@ class MessageBubble extends StatelessWidget {
               Navigator.pop(context);
               onDelete?.call();
             },
-            child: const Text(
-              "Delete",
-              style: TextStyle(color: Colors.red),
+            child: Text(
+              l10n.delete,
+              style: const TextStyle(color: Colors.red),
             ),
           ),
         ],
@@ -275,7 +276,7 @@ class MessageBubble extends StatelessWidget {
                         Padding(
                           padding: const EdgeInsets.only(bottom: 3),
                           child: Text(
-                            'Forwarded',
+                            AppLocalizations.of(context).forwardedLabel,
                             style: TextStyle(
                               fontSize: 11,
                               fontStyle: FontStyle.italic,
@@ -371,7 +372,7 @@ class MessageBubble extends StatelessWidget {
                               padding:
                               const EdgeInsets.only(right: 4),
                               child: Text(
-                                'edited',
+                                AppLocalizations.of(context).editedLabel,
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontStyle: FontStyle.italic,

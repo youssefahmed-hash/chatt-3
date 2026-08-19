@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../models/chat.dart';
 import '../models/message.dart';
 import '../services/api_service.dart';
@@ -85,18 +86,19 @@ class _ForwardScreenState extends State<ForwardScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Could not load chats:\n$_error',
+                  Text(
+                      '${AppLocalizations.of(context).couldNotLoadChats}:\n$_error',
                       textAlign: TextAlign.center),
                   const SizedBox(height: 12),
                   ElevatedButton(
                     onPressed: _load,
-                    child: const Text('Retry'),
+                    child: Text(AppLocalizations.of(context).retry),
                   ),
                 ],
               ),
             )
           : _chats.isEmpty
-          ? const Center(child: Text('No conversations yet'))
+          ? Center(child: Text(AppLocalizations.of(context).noConversationsYet))
           : ListView.builder(
               itemCount: _chats.length,
               itemBuilder: (context, index) {

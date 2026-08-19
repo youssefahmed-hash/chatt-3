@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../config/api_config.dart';
+import '../l10n/generated/app_localizations.dart';
 
 /// Fullscreen video viewer opened when the user taps a video message.
 ///
@@ -96,11 +97,11 @@ class _FullScreenVideoState extends State<FullScreenVideo> {
       body: SafeArea(
         child: Center(
           child: _error
-              ? const Padding(
-                  padding: EdgeInsets.all(16),
+              ? Padding(
+                  padding: const EdgeInsets.all(16),
                   child: Text(
-                    'Video could not be loaded',
-                    style: TextStyle(color: Colors.white70, fontSize: 15),
+                    AppLocalizations.of(context).videoCouldNotLoad,
+                    style: const TextStyle(color: Colors.white70, fontSize: 15),
                   ),
                 )
               : !_ready || _controller == null

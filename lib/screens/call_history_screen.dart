@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../services/api_service.dart';
 
 /// Call history (voice / video calls involving the current user).
@@ -62,7 +63,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Call History'),
+        title: Text(AppLocalizations.of(context).callHistory),
         backgroundColor: theme.appBarTheme.backgroundColor,
         foregroundColor: theme.appBarTheme.foregroundColor,
       ),
@@ -71,7 +72,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
           : _error != null
           ? Center(child: Text('Could not load:\n$_error'))
           : _calls.isEmpty
-          ? const Center(child: Text('No calls yet'))
+          ? Center(child: Text(AppLocalizations.of(context).noCallsYet))
           : ListView.builder(
               itemCount: _calls.length,
               itemBuilder: (context, index) {
@@ -87,14 +88,15 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                   iconColor = Colors.red;
                 }
 
+                final l10n = AppLocalizations.of(context);
                 final subtitle = [
                   direction == 'outgoing'
-                      ? 'Outgoing'
+                      ? l10n.outgoingCall
                       : direction == 'missed'
-                      ? 'Missed'
+                      ? l10n.missedCall
                       : direction == 'rejected'
-                      ? 'Rejected'
-                      : 'Incoming',
+                      ? l10n.rejectedCall
+                      : l10n.incomingCall,
                   if (_formatDuration(
                           (call['duration'] as num?)?.toInt() ?? 0)
                       .isNotEmpty)
@@ -108,7 +110,8 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                         .withValues(alpha: 0.15),
                     child: Icon(type, color: iconColor),
                   ),
-                  title: Text(call['name'] ?? 'Unknown'),
+                  title: Text(
+                      call['name'] ?? AppLocalizations.of(context).unknown),
                   subtitle: Text(
                     '$subtitle · ${_formatTime(DateTime.tryParse(call['startedAt']?.toString() ?? '') ?? DateTime.now())}',
                   ),

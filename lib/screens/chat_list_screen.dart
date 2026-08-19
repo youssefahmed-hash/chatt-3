@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'select_group_members_screen.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../models/chat.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
@@ -132,6 +133,29 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   Future<void> _logout() async {
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.logout),
+        content: Text(l10n.logoutConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(
+              l10n.logout,
+              style: const TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
     SocketService.instance.disconnect();
     await AuthService.logout();
     if (!mounted) return;
@@ -156,15 +180,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
       context: context,
       builder: (_) => ListView(
         children: [
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('Start a new chat',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(AppLocalizations.of(context).startNewChat,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           ),
           if (users.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('No other users yet. Register another account.'),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(AppLocalizations.of(context).noOtherUsersYet),
             ),
           ...users.map((u) => ListTile(
                 leading: CircleAvatar(
@@ -246,15 +270,18 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Scaffold(
         appBar: AppBar(
-          title: Text(Session.userName == null ? 'Chats' : 'Chats · ${Session.userName}'),
+          title: Text(Session.userName == null
+              ? l10n.chats
+              : l10n.chatsWithUser(Session.userName!)),
           backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
           actions: [
 
             IconButton(
               icon: const Icon(Icons.account_circle),
-              tooltip: 'Profile',
+              tooltip: l10n.profile,
               onPressed: () {
                 Navigator.push(
                   context,
@@ -306,25 +333,25 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     break;
                 }
               },
-              itemBuilder: (_) => const [
+              itemBuilder: (context) => [
                 PopupMenuItem(
                   value: 'starred',
-                  child: Text('Starred Messages'),
+                  child: Text(AppLocalizations.of(context).starredMessages),
                 ),
                 PopupMenuItem(
                   value: 'calls',
-                  child: Text('Call History'),
+                  child: Text(AppLocalizations.of(context).callHistory),
                 ),
                 PopupMenuItem(
                   value: 'archived',
-                  child: Text('Archived Chats'),
+                  child: Text(AppLocalizations.of(context).archivedChats),
                 ),
               ],
             ),
 
             IconButton(
               icon: const Icon(Icons.logout),
-              tooltip: 'Logout',
+              tooltip: l10n.logout,
               onPressed: _logout,
             ),
           ],
@@ -360,7 +387,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
               controller: searchController,
               onChanged: _applySearch,
               decoration: InputDecoration(
-                hintText: "Search chats...",
+                hintText: AppLocalizations.of(context).searchChatsHint,
                 prefixIcon: Icon(
                   Icons.search,
                   color: Theme.of(context).iconTheme.color,
@@ -393,19 +420,22 @@ class _ChatListScreenState extends State<ChatListScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Could not load chats:\n$_error', textAlign: TextAlign.center),
+            Text(
+              '${AppLocalizations.of(context).couldNotLoadChats}:\n$_error',
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: _loadConversations,
-              child: const Text('Retry'),
+              child: Text(AppLocalizations.of(context).retry),
             ),
           ],
         ),
       );
     }
     if (_filtered.isEmpty) {
-      return const Center(
-        child: Text('No chats yet. Tap the button to start one.'),
+      return Center(
+        child: Text(AppLocalizations.of(context).noChatsYet),
       );
     }
 

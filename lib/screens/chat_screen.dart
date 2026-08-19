@@ -11,6 +11,7 @@ import 'pinned_messages_screen.dart';
 import '../models/chat.dart';
 import '../models/message.dart';
 import '../models/message_type.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/socket_service.dart';
 import '../services/jitsi_service.dart';
@@ -343,7 +344,7 @@ class _ChatScreenState extends State<ChatScreen> {
       // لو permission مرفوضة
       if (path == null) {
         debugPrint(
-          'Recording permission denied',
+          AppLocalizations.of(context).recordingPermissionDenied,
         );
 
         return;
@@ -465,7 +466,7 @@ class _ChatScreenState extends State<ChatScreen> {
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Voice send failed: $e')),
+          SnackBar(content: Text('${AppLocalizations.of(context).sendFailed} $e')),
         );
       }
     }
@@ -630,7 +631,7 @@ class _ChatScreenState extends State<ChatScreen> {
       }
 
       debugPrint(
-        'Image uploaded successfully',
+        AppLocalizations.of(context).imageUploadedSuccess,
       );
     } catch (e) {
       debugPrint(
@@ -638,7 +639,7 @@ class _ChatScreenState extends State<ChatScreen> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Image upload failed: $e')),
+          SnackBar(content: Text('${AppLocalizations.of(context).sendFailed} $e')),
         );
       }
     }
@@ -690,7 +691,7 @@ class _ChatScreenState extends State<ChatScreen> {
       debugPrint('Upload file failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('File upload failed: $e')),
+          SnackBar(content: Text('${AppLocalizations.of(context).sendFailed} $e')),
         );
       }
     }
@@ -727,7 +728,7 @@ class _ChatScreenState extends State<ChatScreen> {
       debugPrint('Upload video failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Video upload failed: $e')),
+          SnackBar(content: Text('${AppLocalizations.of(context).sendFailed} $e')),
         );
       }
     }
@@ -1051,9 +1052,9 @@ class _ChatScreenState extends State<ChatScreen> {
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content:
-              Text('Call rejected'),
+              Text(AppLocalizations.of(context).callRejectedLabel),
             ),
           );
         });
@@ -1165,8 +1166,8 @@ class _ChatScreenState extends State<ChatScreen> {
         createdAt: DateTime.now(),
       ));
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Offline — message queued, will send when connected'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context).messagesWillBeSent),
         ),
       );
       widget.chat.lastMessage = text;
@@ -1259,8 +1260,8 @@ class _ChatScreenState extends State<ChatScreen> {
       ));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Message queued — will retry when connection recovers'),
+          SnackBar(
+            content: Text(AppLocalizations.of(context).messagesWillBeSent),
           ),
         );
       }
@@ -1328,7 +1329,7 @@ class _ChatScreenState extends State<ChatScreen> {
       debugPrint('EDIT ERROR: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Edit failed: $e')),
+          SnackBar(content: Text('${AppLocalizations.of(context).sendFailed} $e')),
         );
       }
     }
@@ -1756,7 +1757,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   color: theme.appBarTheme.foregroundColor,
                 ),
                 decoration: InputDecoration(
-                  hintText: 'Search messages...',
+                  hintText: AppLocalizations.of(context).searchMessagesHint,
                   hintStyle: const TextStyle(color: Colors.white54),
                   border: InputBorder.none,
                 ),
@@ -2151,8 +2152,8 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     if (_searchResults.isEmpty) {
-      return const Center(
-        child: Text('No matching messages'),
+      return Center(
+        child: Text(AppLocalizations.of(context).noSearchResults),
       );
     }
 
@@ -2162,12 +2163,14 @@ class _ChatScreenState extends State<ChatScreen> {
         final m = _searchResults[index];
         return ListTile(
           title: Text(
-            m.type == MessageType.text ? m.text : '${m.type.asString} message',
+            m.type == MessageType.text
+                ? m.text
+                : '${m.type.asString} ${AppLocalizations.of(context).messageGeneric}',
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
           subtitle: Text(
-            '${m.senderName ?? 'Unknown'} · '
+            '${m.senderName ?? AppLocalizations.of(context).unknown} · '
             '${m.createdAt.hour.toString().padLeft(2, '0')}:'
             '${m.createdAt.minute.toString().padLeft(2, '0')}',
           ),

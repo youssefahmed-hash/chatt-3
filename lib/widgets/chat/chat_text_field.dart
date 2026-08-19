@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/generated/app_localizations.dart';
 
 class ChatTextField extends StatelessWidget {
   final TextEditingController controller;
@@ -21,7 +22,7 @@ class ChatTextField extends StatelessWidget {
         color: theme.textTheme.bodyLarge?.color,
       ),
       decoration: InputDecoration(
-        hintText: "Type a message...",
+        hintText: AppLocalizations.of(context).typeMessageHint,
         hintStyle: TextStyle(
           color: theme.hintColor,
         ),

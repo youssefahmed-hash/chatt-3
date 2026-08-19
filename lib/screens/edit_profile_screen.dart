@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../l10n/generated/app_localizations.dart';
 import '../../providers/profile_provider.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -63,11 +64,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final loading =
         context.watch<ProfileProvider>().loading;
 
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
 
       appBar: AppBar(
-        title: const Text('Edit Profile'),
+        title: Text(l10n.editProfile),
       ),
 
 
@@ -82,8 +84,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             TextField(
               controller: nameController,
 
-              decoration: const InputDecoration(
-                labelText: 'Name',
+              decoration: InputDecoration(
+                labelText: l10n.name,
               ),
             ),
 
@@ -96,8 +98,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
               maxLines: 3,
 
-              decoration: const InputDecoration(
-                labelText: 'Bio',
+              decoration: InputDecoration(
+                labelText: l10n.bio,
               ),
             ),
 
@@ -114,7 +116,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
                 child: loading
                     ? const CircularProgressIndicator()
-                    : const Text('Save'),
+                    : Text(l10n.save),
 
               ),
             ),

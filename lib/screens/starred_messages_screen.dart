@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../models/message.dart';
 import '../models/message_type.dart';
 import '../services/api_service.dart';
@@ -51,7 +52,7 @@ class _StarredMessagesScreenState extends State<StarredMessagesScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Starred Messages'),
+        title: Text(AppLocalizations.of(context).starredMessages),
         backgroundColor: theme.appBarTheme.backgroundColor,
         foregroundColor: theme.appBarTheme.foregroundColor,
       ),
@@ -60,7 +61,7 @@ class _StarredMessagesScreenState extends State<StarredMessagesScreen> {
           : _error != null
           ? Center(child: Text('Could not load:\n$_error'))
           : _messages.isEmpty
-          ? const Center(child: Text('No starred messages yet'))
+          ? Center(child: Text(AppLocalizations.of(context).noStarredMessages))
           : ListView.builder(
               itemCount: _messages.length,
               itemBuilder: (context, index) {
@@ -75,7 +76,7 @@ class _StarredMessagesScreenState extends State<StarredMessagesScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   subtitle: Text(
-                    '${m.senderName ?? 'Unknown'} · ${_formatTime(m.createdAt)}',
+                    '${m.senderName ?? AppLocalizations.of(context).unknown} · ${_formatTime(m.createdAt)}',
                   ),
                   isThreeLine: true,
                 );
@@ -85,21 +86,22 @@ class _StarredMessagesScreenState extends State<StarredMessagesScreen> {
   }
 
   String _typeLabel(MessageType t) {
+    final l10n = AppLocalizations.of(context);
     switch (t) {
       case MessageType.image:
-        return '📷 Photo';
+        return l10n.photoNotification;
       case MessageType.voice:
-        return '🎤 Voice message';
+        return l10n.voiceNotification;
       case MessageType.file:
-        return '📎 File';
+        return l10n.fileNotification;
       case MessageType.video:
-        return '🎬 Video';
+        return l10n.videoNotification;
       case MessageType.videoCall:
-        return '📹 Video call';
+        return l10n.videoCallNotification;
       case MessageType.voiceCall:
-        return '📞 Voice call';
+        return l10n.voiceCallNotification;
       default:
-        return 'Message';
+        return l10n.messageGeneric;
     }
   }
 

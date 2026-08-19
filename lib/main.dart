@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
+import 'l10n/generated/app_localizations.dart';
+import 'providers/locale_provider.dart';
 import 'providers/profile_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/chat_list_screen.dart';
@@ -29,6 +32,16 @@ Future<void> main() async {
   final themeProvider = ThemeProvider();
   await themeProvider.loadTheme();
 
+  // Restore saved language (Arabic / English)
+  final localeProvider = LocaleProvider();
+  await localeProvider.load();
+
+  // Notifications must render titles/bodies in the chosen language.
+  localeProvider.addListener(() {
+    NotificationService.locale =
+        localeProvider.locale ?? const Locale('en');
+  });
+
   // Offline message queue + notifications.
   await OfflineQueue.instance.init();
   await NotificationService.init();
@@ -39,6 +52,9 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider(
           create: (_) => themeProvider,
+        ),
+        ChangeNotifierProvider(
+          create: (_) => localeProvider,
         ),
 
         ChangeNotifierProvider(
@@ -56,12 +72,22 @@ class ChatApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final localeProvider = Provider.of<LocaleProvider>(context);
 
     return MaterialApp(
       navigatorKey: CallListener.navigatorKey,
       debugShowCheckedModeBanner: false,
 
       themeMode: themeProvider.themeMode,
+
+      locale: localeProvider.locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
 
       // ================= LIGHT THEME =================
       theme: ThemeData(
