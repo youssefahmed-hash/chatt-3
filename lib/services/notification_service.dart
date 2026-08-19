@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     hide Message;
+import '../l10n/generated/app_localizations.dart';
 import '../models/message.dart';
 import '../models/chat.dart';
 import '../screens/chat_screen.dart';
@@ -32,6 +33,10 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   static bool _initialized = false;
+
+  /// Current app language — used to format notification titles/bodies.
+  /// Kept up to date from [main.dart] via the [LocaleProvider].
+  static Locale locale = const Locale('en');
 
   static const _channelId = 'chatt_messages';
   static const _channelName = 'Chat Messages';
@@ -207,31 +212,32 @@ class MessageNotificationListener with WidgetsBindingObserver {
           msg.senderId == Session.userId) {
         return;
       }
+      final l10n = lookupAppLocalizations(NotificationService.locale);
       _counter = (_counter % 99) + 1;
       NotificationService.showMessage(
-        title: msg.senderName ?? 'New message',
-        body: _bodyFor(msg),
+        title: msg.senderName ?? l10n.newMessageNotificationTitle,
+        body: _bodyFor(msg, l10n),
         id: _counter,
         payload: event.conversationId,
       );
     });
   }
 
-  String _bodyFor(Message msg) {
+  String _bodyFor(Message msg, AppLocalizations l10n) {
     final type = msg.type.name;
     switch (type) {
       case 'image':
-        return '📷 Photo';
+        return l10n.photoNotification;
       case 'voice':
-        return '🎤 Voice message';
+        return l10n.voiceNotification;
       case 'file':
-        return '📎 File';
+        return l10n.fileNotification;
       case 'video':
-        return '🎬 Video';
+        return l10n.videoNotification;
       case 'videoCall':
-        return '📹 Video call';
+        return l10n.videoCallNotification;
       case 'voiceCall':
-        return '📞 Voice call';
+        return l10n.voiceCallNotification;
       default:
         return msg.text;
     }
