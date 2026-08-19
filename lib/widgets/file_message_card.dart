@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../config/api_config.dart';
 import '../services/file_download.dart';
 
@@ -51,6 +52,22 @@ class _FileMessageCardState extends State<FileMessageCard> {
     return Icons.insert_drive_file;
   }
 
+  Future<void> _open(BuildContext context) async {
+    final target = widget.url;
+    if (target == null) return;
+
+    try {
+      final opened = await launchUrl(
+        Uri.parse(_fullUrl(target)),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) await _download(context);
+    } catch (_) {
+      // No handler available — fall back to saving the file locally.
+      await _download(context);
+    }
+  }
+
   Future<void> _download(BuildContext context) async {
     final target = widget.url;
     final name = widget.fileName;
@@ -87,7 +104,7 @@ class _FileMessageCardState extends State<FileMessageCard> {
             : widget.fileName!;
 
     return GestureDetector(
-      onTap: () => _download(context),
+      onTap: () => _open(context),
       child: Container(
         constraints: const BoxConstraints(maxWidth: 220),
         padding: const EdgeInsets.all(10),
@@ -135,7 +152,14 @@ class _FileMessageCardState extends State<FileMessageCard> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.download, size: 20, color: Colors.grey),
+                : GestureDetector(
+                    onTap: () => _download(context),
+                    child: const Icon(
+                      Icons.download,
+                      size: 20,
+                      color: Colors.grey,
+                    ),
+                  ),
           ],
         ),
       ),

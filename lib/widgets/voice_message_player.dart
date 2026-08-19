@@ -211,76 +211,83 @@ class _VoiceMessagePlayerState
     )
         : duration;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 6,
-        vertical: 4,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 220),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 6,
+          vertical: 4,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.max,
+          children: [
 
-          IconButton(
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            onPressed: failed ? play : (loading ? null : play),
-            icon: Icon(
-              failed
-                  ? Icons.refresh
-                  : loading
-                  ? Icons.hourglass_empty
-                  : playing
-                  ? Icons.pause_circle_filled
-                  : Icons.play_circle_fill,
-              size: 38,
-              color: failed
-                  ? Theme.of(context).colorScheme.error
-                  : Theme.of(context).colorScheme.primary,
+            IconButton(
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              onPressed: failed ? play : (loading ? null : play),
+              icon: Icon(
+                failed
+                    ? Icons.refresh
+                    : loading
+                    ? Icons.hourglass_empty
+                    : playing
+                    ? Icons.pause_circle_filled
+                    : Icons.play_circle_fill,
+                size: 38,
+                color: failed
+                    ? Theme.of(context).colorScheme.error
+                    : Theme.of(context).colorScheme.primary,
+              ),
             ),
-          ),
 
-          const SizedBox(width: 8),
+            const SizedBox(width: 8),
 
-          // Playback waveform (tap/drag to seek).
-          SizedBox(
-            width: 130,
-            child: PlaybackWaveform(
-              durationMs: total.inMilliseconds,
-              positionMs: position.inMilliseconds,
-              seed: _seed,
-              onSeekFraction: seekToFraction,
-            ),
-          ),
-
-          const SizedBox(width: 8),
-
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                "${format(position)} / ${format(total)}",
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
+            // Playback waveform (tap/drag to seek).
+            Flexible(
+              child: SizedBox(
+                height: 34,
+                child: PlaybackWaveform(
+                  durationMs: total.inMilliseconds,
+                  positionMs: position.inMilliseconds,
+                  seed: _seed,
+                  onSeekFraction: seekToFraction,
                 ),
               ),
+            ),
 
-              // Playback speed toggle.
-              GestureDetector(
-                onTap: cycleSpeed,
-                child: Text(
-                  '${_speed.toStringAsFixed(1)}x',
+            const SizedBox(width: 8),
+
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  "${format(position)} / ${format(total)}",
                   style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF25D366),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-              ),
-            ],
-          ),
-        ],
+
+                // Playback speed toggle.
+                GestureDetector(
+                  onTap: cycleSpeed,
+                  child: Text(
+                    '${_speed.toStringAsFixed(1)}x',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF25D366),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
