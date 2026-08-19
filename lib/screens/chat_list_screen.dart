@@ -416,22 +416,28 @@ class _ChatListScreenState extends State<ChatListScreen> {
         itemBuilder: (context, index) {
           final chat = _filtered[index];
           return ListTile(
-            leading: CircleAvatar(
-              backgroundColor: Theme.of(context).colorScheme.secondary,
-              backgroundImage: chat.groupImage != null &&
-                  chat.groupImage!.isNotEmpty
-                  ? NetworkImage(
-                "${ApiConfig.baseUrl}${chat.groupImage}",
-              )
-                  : null,
-
-              child: chat.groupImage == null ||
-                  chat.groupImage!.isEmpty
-                  ? Text(
-                chat.name.isNotEmpty ? chat.name[0] : '?',
-              )
-                  : null,
-            ),
+            leading: chat.isGroup
+                ? CircleAvatar(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    backgroundImage:
+                        chat.groupImage != null &&
+                            chat.groupImage!.isNotEmpty
+                        ? NetworkImage(
+                            "${ApiConfig.baseUrl}${chat.groupImage}",
+                          )
+                        : null,
+                    child: chat.groupImage == null ||
+                            chat.groupImage!.isEmpty
+                        ? const Icon(Icons.group, color: Colors.white)
+                        : null,
+                  )
+                : CircleAvatar(
+                    backgroundColor:
+                        Theme.of(context).colorScheme.secondary,
+                    child: Text(
+                      chat.name.isNotEmpty ? chat.name[0] : '?',
+                    ),
+                  ),
             title: Row(
               children: [
                 Expanded(
@@ -457,7 +463,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
               ],
             ),
             subtitle: Text(
-              chat.lastMessage,
+              chat.isGroup &&
+                  chat.lastMessageSender != null &&
+                  chat.lastMessageSender!.isNotEmpty
+                  ? '${chat.lastMessageSender}: ${chat.lastMessage}'
+                  : chat.lastMessage,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: chat.unreadCount > 0

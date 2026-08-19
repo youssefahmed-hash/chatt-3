@@ -20,6 +20,8 @@ class Chat {
 
   String lastMessage;
 
+  String? lastMessageSender;
+
   String time;
 
   final List<Message> messages;
@@ -48,6 +50,7 @@ class Chat {
     this.peerOnline = false,
     this.peerLastSeen,
     this.unreadCount = 0,
+    this.lastMessageSender,
   });
 
   factory Chat.fromJson(Map<String, dynamic> json) {
@@ -74,6 +77,7 @@ class Chat {
         createdBy: json['createdBy']?.toString(),
         name: json['groupName'] ?? '',
         lastMessage: last?['text'] ?? '',
+        lastMessageSender: last?['sender']?.toString(),
         time: _formatTime(last?['at'] ?? json['updatedAt']),
         messages: [],
         pinnedMessageIds: (json['pinnedMessageIds'] as List?)
@@ -94,6 +98,7 @@ class Chat {
       members: const [],
       name: peer?['name'] ?? '',
       lastMessage: last?['text'] ?? '',
+      lastMessageSender: last?['sender']?.toString(),
       time: _formatTime(last?['at'] ?? json['updatedAt']),
       messages: [],
       admins: const [],

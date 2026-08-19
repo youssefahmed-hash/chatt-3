@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -9,7 +10,6 @@ import '../models/chat.dart';
 import '../screens/chat_screen.dart';
 import 'api_service.dart';
 import 'call_listener.dart';
-import 'notification_platform.dart';
 import 'session.dart';
 import 'socket_service.dart';
 
@@ -74,10 +74,13 @@ class NotificationService {
       // Android 13+ (API 33) requires runtime notification permission.
       await android?.requestNotificationsPermission();
 
-      await android?.createNotificationChannel(const AndroidNotificationChannel(
+      await android?.createNotificationChannel(AndroidNotificationChannel(
         _channelId,
         _channelName,
         importance: Importance.high,
+        playSound: true,
+        sound: RawResourceAndroidNotificationSound('chatt_notification'),
+        vibrationPattern: Int64List.fromList([0, 250, 120, 250]),
       ));
     }
 
@@ -129,7 +132,7 @@ class NotificationService {
         title: title,
         body: body,
         payload: payload,
-        notificationDetails: const NotificationDetails(
+        notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             _channelId,
             _channelName,
@@ -137,6 +140,10 @@ class NotificationService {
             importance: Importance.high,
             priority: Priority.high,
             category: AndroidNotificationCategory.message,
+            playSound: true,
+            sound: RawResourceAndroidNotificationSound('chatt_notification'),
+            enableVibration: true,
+            vibrationPattern: Int64List.fromList([0, 250, 120, 250]),
           ),
           iOS: DarwinNotificationDetails(
             presentAlert: true,

@@ -181,209 +181,238 @@ class MessageBubble extends StatelessWidget {
     final maxWidth =
         MediaQuery.of(context).size.width * 0.75;
 
+    // WhatsApp-style reactions: pills float OUTSIDE the bubble, anchored at
+    // the bottom corner. The bubble then hugs its content and never grows to
+    // fit the reaction bar.
+    final hasReactions =
+        message.reactions.values.any((r) => r.count > 0) ||
+            message.myReactions.isNotEmpty;
+
     return _ReplySwipeDetector(
       onLongPress: () => _showActions(context, isMe: isMe),
       onReply: onReply,
       child: Align(
         alignment:
         isMe ? Alignment.centerRight : Alignment.centerLeft,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: maxWidth,
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: hasReactions ? 16 : 3,
+            top: 1,
           ),
-          child: Container(
-            margin: const EdgeInsets.symmetric(
-              vertical: 3,
-              horizontal: 4,
-            ),
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: isMe
-                  ? (isDark
-                  ? const Color(0xFF056162)
-                  : const Color(0xFFDCF8C6))
-                  : (isDark
-                  ? const Color(0xFF262D31)
-                  : Colors.white),
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(12),
-                topRight: const Radius.circular(12),
-                bottomLeft:
-                Radius.circular(isMe ? 12 : 2),
-                bottomRight:
-                Radius.circular(isMe ? 2 : 12),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(
-                    alpha: isDark ? 0.35 : 0.12,
-                  ),
-                  blurRadius: 2,
-                  offset: const Offset(0, 1),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: maxWidth,
                 ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment:
-              CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!isMe && isGroupMessage)
-                  Padding(
-                    padding:
-                    const EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      message.senderName!,
-                      style: TextStyle(
-                        color: theme
-                            .colorScheme.secondary,
-                        fontWeight:
-                        FontWeight.bold,
-                        fontSize: 13,
+                child: Container(
+                  margin: const EdgeInsets.symmetric(
+                    vertical: 2,
+                    horizontal: 3,
+                  ),
+                  padding:
+                  const EdgeInsets.fromLTRB(9, 6, 9, 8),
+                  decoration: BoxDecoration(
+                    color: isMe
+                        ? (isDark
+                        ? const Color(0xFF056162)
+                        : const Color(0xFFDCF8C6))
+                        : (isDark
+                        ? const Color(0xFF262D31)
+                        : Colors.white),
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(10),
+                      topRight: const Radius.circular(10),
+                      bottomLeft: Radius.circular(
+                        (!isMe && hasReactions) ? 10 : (isMe ? 10 : 2),
+                      ),
+                      bottomRight: Radius.circular(
+                        (isMe && hasReactions) ? 10 : (isMe ? 2 : 10),
                       ),
                     ),
-                  ),
-
-                // ===== الرد =====
-                if (message.replyTo != null)
-                  QuotedMessagePreview(
-                    reply: message.replyTo,
-                    onTap: onTapReply,
-                  ),
-
-                // ===== Forwarded label =====
-                if (message.isForwarded)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: Text(
-                      'Forwarded',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontStyle: FontStyle.italic,
-                        color: theme.textTheme.bodySmall?.color,
-                      ),
-                    ),
-                  ),
-
-                // ===== محتوى الرسالة =====
-
-                if (message.type ==
-                    MessageType.image)
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              FullScreenImage(
-                                imageUrl: message
-                                    .imageUrl!
-                                    .startsWith(
-                                    'http')
-                                    ? message.imageUrl!
-                                    : "${ApiConfig.baseUrl}${message.imageUrl}",
-                              ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(
+                          alpha: isDark ? 0.55 : 0.14,
                         ),
-                      );
-                    },
-                    child: ClipRRect(
-                      borderRadius:
-                      BorderRadius.circular(10),
-                      child: Image.network(
-                        message.imageUrl!
-                            .startsWith("http")
-                            ? message.imageUrl!
-                            : "${ApiConfig.baseUrl}${message.imageUrl}",
-                        width: 220,
-                        fit: BoxFit.cover,
+                        blurRadius: 3,
+                        offset: const Offset(0, 1),
                       ),
-                    ),
-                  )
-
-                else if (message.type ==
-                    MessageType.voice)
-                  VoiceMessagePlayer(
-                    url: message.voiceUrl!
-                        .startsWith("http")
-                        ? message.voiceUrl!
-                        : "${ApiConfig.baseUrl}${message.voiceUrl}",
-                    duration:
-                    message.voiceDuration,
-                  )
-
-                else if (message.type ==
-                    MessageType.file)
-                  FileMessageCard(
-                    url: message.fileUrl,
-                    fileName: message.fileName,
-                    fileSize: message.fileSize,
-                    fileType: message.fileType,
-                  )
-
-                else if (message.type ==
-                    MessageType.video)
-                  VideoMessagePlayer(
-                    url: message.videoUrl!,
-                    thumbUrl: message.videoThumbUrl,
-                  )
-
-                else
-                  Text(
-                    message.text,
-                    style: TextStyle(
-                      color: isDark
-                          ? Colors.white
-                          : Colors.black87,
-                      fontSize: 15,
-                    ),
+                    ],
                   ),
-
-                const SizedBox(height: 4),
-
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (message.edited)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 4),
-                        child: Text(
-                          'edited',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontStyle: FontStyle.italic,
-                            color: isDark
-                                ? Colors.white60
-                                : Colors.grey.shade600,
+                  child: Column(
+                    crossAxisAlignment:
+                    CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!isMe && isGroupMessage)
+                        Padding(
+                          padding:
+                          const EdgeInsets.only(bottom: 3),
+                          child: Text(
+                            message.senderName!,
+                            style: TextStyle(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .secondary,
+                              fontWeight:
+                              FontWeight.w600,
+                              fontSize: 12.5,
+                            ),
                           ),
                         ),
-                      ),
-                    Text(
-                      _formatTime(message.createdAt),
-                      style: TextStyle(
-                        color: isDark
-                            ? Colors.white60
-                            : Colors.grey.shade600,
-                        fontSize: 11,
-                      ),
-                    ),
 
-                    // ===== Delivery / read check marks (sender only) =====
-                    if (message.isMe) ...[
-                      const SizedBox(width: 3),
-                      _CheckMarks(status: message.status),
+                      // ===== الرد =====
+                      if (message.replyTo != null)
+                        QuotedMessagePreview(
+                          reply: message.replyTo,
+                          onTap: onTapReply,
+                        ),
+
+                      // ===== Forwarded label =====
+                      if (message.isForwarded)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 3),
+                          child: Text(
+                            'Forwarded',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontStyle: FontStyle.italic,
+                              color: theme.textTheme.bodySmall?.color,
+                            ),
+                          ),
+                        ),
+
+                      // ===== محتوى الرسالة =====
+                      if (message.type == MessageType.image)
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    FullScreenImage(
+                                      imageUrl: message
+                                          .imageUrl!
+                                          .startsWith(
+                                          'http')
+                                          ? message.imageUrl!
+                                          : "${ApiConfig.baseUrl}${message.imageUrl}",
+                                    ),
+                              ),
+                            );
+                          },
+                          child: ClipRRect(
+                            borderRadius:
+                            BorderRadius.circular(8),
+                            child: Image.network(
+                              message.imageUrl!
+                                  .startsWith("http")
+                                  ? message.imageUrl!
+                                  : "${ApiConfig.baseUrl}${message.imageUrl}",
+                              width: 220,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        )
+
+                      else if (message.type == MessageType.voice)
+                        VoiceMessagePlayer(
+                          url: message.voiceUrl!
+                              .startsWith("http")
+                              ? message.voiceUrl!
+                              : "${ApiConfig.baseUrl}${message.voiceUrl}",
+                          duration:
+                          message.voiceDuration,
+                        )
+
+                      else if (message.type == MessageType.file)
+                        FileMessageCard(
+                          url: message.fileUrl,
+                          fileName: message.fileName,
+                          fileSize: message.fileSize,
+                          fileType: message.fileType,
+                        )
+
+                      else if (message.type == MessageType.video)
+                        VideoMessagePlayer(
+                          url: message.videoUrl!,
+                          thumbUrl: message.videoThumbUrl,
+                        )
+
+                      else
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 2),
+                          child: Text(
+                            message.text,
+                            textAlign:
+                            message.text.length > 50
+                                ? TextAlign.start
+                                : TextAlign.end,
+                            style: TextStyle(
+                              color: isDark
+                                  ? Colors.white
+                                  : Colors.black87,
+                              fontSize: 15,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+
+                      // ===== Timestamp + status ticks =====
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment:
+                        CrossAxisAlignment.center,
+                        children: [
+                          if (message.edited)
+                            Padding(
+                              padding:
+                              const EdgeInsets.only(right: 4),
+                              child: Text(
+                                'edited',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontStyle: FontStyle.italic,
+                                  color: isDark
+                                      ? Colors.white60
+                                      : Colors.grey.shade600,
+                                ),
+                              ),
+                            ),
+                          Text(
+                            _formatTime(message.createdAt),
+                            style: TextStyle(
+                              color: isDark
+                                  ? Colors.white60
+                                  : Colors.grey.shade600,
+                              fontSize: 11,
+                            ),
+                          ),
+                          if (message.isMe) ...[
+                            const SizedBox(width: 3),
+                            _CheckMarks(status: message.status),
+                          ],
+                        ],
+                      ),
                     ],
-                  ],
+                  ),
                 ),
-
-                // ===== Reactions =====
-                ReactionBar(
-                  reactions: message.reactions,
-                  myReactions: message.myReactions,
-                  emojis: const [],
-                  onTap: onReaction ?? (_) {},
+              ),
+              if (hasReactions)
+                Positioned(
+                  bottom: -11,
+                  left: isMe ? null : 8,
+                  right: isMe ? 8 : null,
+                  child: ReactionBar(
+                    reactions: message.reactions,
+                    myReactions: message.myReactions,
+                    emojis: const [],
+                    onTap: onReaction ?? (_) {},
+                  ),
                 ),
-              ],
-            ),
+            ],
           ),
         ),
       ),
