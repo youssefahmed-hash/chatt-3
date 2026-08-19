@@ -49,3 +49,8 @@ server/logs.err
 
 # Generated VAPID push keys (regenerated on first server run)
 server/data/
+
+# Firebase secret files
+android/app/google-services.json
+server/serviceAccountKey.json
+server/data/firebase-service-account.json

@@ -1,14 +1,23 @@
 import fs from 'fs';
 import path from 'path';
 import webpush from 'web-push';
+import { initializeApp, cert } from 'firebase-admin/app';
+import { getMessaging } from 'firebase-admin/messaging';
 import { Device } from '../models/Device.js';
 import { env } from '../config/env.js';
 
 // VAPID keys are generated once and cached on disk (or provided via env),
 // so the Web Push integration works out of the box with zero external setup.
 const VAPID_FILE = path.resolve('data/vapid.json');
+const FIREBASE_SERVICE_ACCOUNT_PATHS = [
+  process.env.FIREBASE_SERVICE_ACCOUNT,
+  path.resolve('serviceAccountKey.json'),
+  path.resolve('data/firebase-service-account.json'),
+].filter(Boolean);
 
 let vapidCache = null;
+let fcmApp = null;
+let fcmEnabledWarned = false;
 
 export function getVapidKeys() {
   if (vapidCache) return vapidCache;
@@ -49,10 +58,43 @@ function configureWebpush() {
   webpush.setVapidDetails(subject, publicKey, privateKey);
 }
 
+// Lazy-load the Firebase admin app once a service-account key is available
+// (server/serviceAccountKey.json, server/data/firebase-service-account.json
+// or the FIREBASE_SERVICE_ACCOUNT env var). Until then phones simply keep
+// their tokens registered and no FCM send happens (web push keeps working).
+function getFcm() {
+  if (fcmApp) return getMessaging(fcmApp);
+
+  const accountFile = FIREBASE_SERVICE_ACCOUNT_PATHS.find((p) =>
+    fs.existsSync(p),
+  );
+  if (!accountFile) {
+    if (!fcmEnabledWarned) {
+      fcmEnabledWarned = true;
+      console.warn(
+        '⚠️  Firebase service account not found — mobile FCM push is disabled. ' +
+          'Place serviceAccountKey.json in the server folder (or set ' +
+          'FIREBASE_SERVICE_ACCOUNT) to enable phone notifications.',
+      );
+    }
+    return null;
+  }
+
+  try {
+    const serviceAccount = JSON.parse(fs.readFileSync(accountFile, 'utf8'));
+    fcmApp = initializeApp({
+      credential: cert(serviceAccount),
+    });
+    return getMessaging(fcmApp);
+  } catch (err) {
+    console.error('Firebase init error:', err.message);
+    return null;
+  }
+}
+
 // Send a push notification to every registered device of the given users.
-// Only online-aware sockets are excluded by the caller; a device that is
-// foregrounded on mobile will show the local notification instead, so a
-// duplicate is acceptable (the OS collapses by tag when suitable).
+// Web devices receive Web Push (VAPID); Android/iOS devices receive FCM
+// (notification + data payload so tapping opens the right conversation).
 export async function sendPushToUsers(userIds, { title, body, data = {} }) {
   if (!userIds || !userIds.length) return;
 
@@ -61,6 +103,9 @@ export async function sendPushToUsers(userIds, { title, body, data = {} }) {
   const devices = await Device.findAll({
     where: { userId: userIds },
   });
+
+  const fcm = getFcm();
+  const fcmTokens = [];
 
   for (const device of devices) {
     try {
@@ -74,10 +119,9 @@ export async function sendPushToUsers(userIds, { title, body, data = {} }) {
             data,
           }),
         );
+      } else if (fcm) {
+        fcmTokens.push(device);
       }
-      // android / ios native push requires FCM service-account credentials;
-      // the registration flow is ready and documented via FCM once the
-      // server-side credentials (GOOGLE_APPLICATION_CREDENTIALS) exist.
     } catch (err) {
       // 404/410 = subscription expired; drop it so we stop bothering the
       // browser with dead endpoints.
@@ -87,6 +131,42 @@ export async function sendPushToUsers(userIds, { title, body, data = {} }) {
         console.error('Push send error:', err.statusCode || err.message);
       }
     }
+  }
+
+  if (!fcm || !fcmTokens.length) return;
+
+  try {
+    const response = await fcm.sendEachForMulticast({
+      tokens: fcmTokens.map((d) => d.token),
+      notification: {
+        title: title || 'Chatt',
+        body: body || '',
+      },
+      data: {
+        ...Object.fromEntries(
+          Object.entries(data).map(([k, v]) => [k, String(v)]),
+        ),
+        title: title || 'Chatt',
+        body: body || '',
+      },
+    });
+
+    // Drop tokens FCM no longer accepts (uninstalled / revoked).
+    const failed = response.responses
+      .map((r, i) => ({ r, d: fcmTokens[i] }))
+      .filter(({ r }) => !r.success);
+    for (const { r, d } of failed) {
+      const code = r.error?.code || '';
+      const tokenInvalid =
+        code.includes('registration-token-not-registered') ||
+        (code.includes('invalid-argument') &&
+          String(r.error?.message || '').includes('token'));
+      if (tokenInvalid) {
+        await d.destroy().catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.error('FCM multicast error:', err.message || err);
   }
 }
 

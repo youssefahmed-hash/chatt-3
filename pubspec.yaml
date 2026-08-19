@@ -69,6 +69,8 @@ dependencies:
   file_picker: ^12.0.0
   video_player: ^2.13.0
   flutter_local_notifications: ^22.3.0
+  firebase_core: ^4.13.0
+  firebase_messaging: ^16.5.0
 
 # The following section is specific to Flutter packages.
 flutter:

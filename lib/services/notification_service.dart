@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     hide Message;
+import '../firebase_options.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../models/message.dart';
 import '../models/chat.dart';
@@ -27,6 +30,7 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   static bool _initialized = false;
+  static int _counter = 0;
 
   /// Current app language — used to format notification titles/bodies.
   /// Kept up to date from [main.dart] via the [LocaleProvider].
@@ -86,7 +90,70 @@ class NotificationService {
       ));
     }
 
+    await _initFcm();
+
     _initialized = true;
+  }
+
+  /// Firebase Cloud Messaging for native (Android/iOS) devices. Registers
+  /// the FCM token with the server (which pushes through web-push to
+  /// browsers and FCM to phones), shows in-app notifications for foreground
+  /// messages and opens the conversation when a notification is tapped
+  /// (background or fully-closed app).
+  static Future<void> _initFcm() async {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      final messaging = FirebaseMessaging.instance;
+
+      if (Platform.isIOS) {
+        await messaging.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+      }
+
+      final platform = Platform.isIOS ? 'ios' : 'android';
+
+      final token = await messaging.getToken();
+      if (token != null && token.isNotEmpty) {
+        await ApiService.registerDevice(token, platform);
+      }
+
+      messaging.onTokenRefresh.listen((String token) async {
+        if (token.isEmpty) return;
+        await ApiService.registerDevice(token, platform);
+      });
+
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        final conversationId = message.data['conversationId'] ?? '';
+        final title = message.notification?.title ?? 'Chatt';
+        final body = message.notification?.body ?? '';
+        _counter = (_counter % 99) + 1;
+        unawaited(NotificationService.showMessage(
+          title: title,
+          body: body,
+          id: _counter,
+          payload: conversationId,
+        ));
+      });
+
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        final conversationId = message.data['conversationId'] ?? '';
+        if (conversationId.isEmpty) return;
+        openConversation(conversationId);
+      });
+
+      final initial = await messaging.getInitialMessage();
+      final initialConversationId = initial?.data['conversationId'];
+      if (initialConversationId != null && initialConversationId.isNotEmpty) {
+        openConversation(initialConversationId);
+      }
+    } catch (e) {
+      debugPrint('FCM init error: $e');
+    }
   }
 
   // ===== Web (Chrome) browser notifications =====
