@@ -6,9 +6,11 @@ import {
   me,
   verifyUserOtp,
   changeCredentials,
+  changePassword,
   registerSchema,
   loginSchema,
   verifyOtpSchema,
+  changePasswordSchema,
 } from '../controllers/auth.controller.js';
 
 import { validate } from '../middleware/validate.js';
@@ -43,6 +45,14 @@ router.post(
   '/change-credentials',
   protect,
   changeCredentials,
+);
+
+// Change Password (any authenticated user, verifies current password)
+router.post(
+  '/change-password',
+  protect,
+  validate(changePasswordSchema),
+  changePassword,
 );
 
 // Current User

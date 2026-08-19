@@ -24,6 +24,11 @@ export const verifyOtpSchema = z.object({
   otp: z.string().length(6),
 });
 
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string().min(6, 'Password must be at least 6 characters').max(128),
+});
+
 // POST /api/auth/register
 export const register = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
@@ -126,6 +131,24 @@ export const verifyUserOtp = asyncHandler(async (req, res) => {
 
   });
 
+});
+
+// POST /api/auth/change-password
+// Any authenticated user can change their own password by verifying the
+// current one first. The existing passwordHash hook re-hashes the new value.
+export const changePassword = asyncHandler(async (req, res) => {
+  const user = req.user;
+  const { currentPassword, newPassword } = req.body;
+
+  const ok = await user.comparePassword(currentPassword);
+  if (!ok) {
+    throw new ApiError(400, 'Current password is incorrect');
+  }
+
+  user.passwordHash = newPassword;
+  await user.save();
+
+  res.json({ message: 'Password changed successfully' });
 });
 
 // POST /api/auth/change-credentials

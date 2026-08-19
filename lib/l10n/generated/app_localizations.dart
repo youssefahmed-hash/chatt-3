@@ -590,6 +590,18 @@ abstract class AppLocalizations {
   /// **'Confirm New Password'**
   String get confirmNewPassword;
 
+  /// No description provided for @show.
+  ///
+  /// In en, this message translates to:
+  /// **'Show'**
+  String get show;
+
+  /// No description provided for @hide.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide'**
+  String get hide;
+
   /// No description provided for @passwordMismatch.
   ///
   /// In en, this message translates to:

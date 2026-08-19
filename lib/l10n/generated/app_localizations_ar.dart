@@ -259,6 +259,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get confirmNewPassword => 'تأكيد كلمة المرور الجديدة';
 
   @override
+  String get show => 'إظهار';
+
+  @override
+  String get hide => 'إخفاء';
+
+  @override
   String get passwordMismatch => 'كلمتا المرور غير متطابقتين.';
 
   @override

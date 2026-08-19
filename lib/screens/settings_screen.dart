@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
+import 'change_password_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -66,7 +67,7 @@ class SettingsScreen extends StatelessWidget {
           const Divider(),
 
           ListTile(
-            leading: const Icon(Icons.translate),
+            leading: const Icon(Icons.language),
             title: Text(l10n.language),
             subtitle: Text(
               localeProvider.locale?.languageCode == 'ar'
@@ -75,6 +76,22 @@ class SettingsScreen extends StatelessWidget {
             ),
             trailing: const Icon(Icons.arrow_drop_down),
             onTap: () => _pickLanguage(context),
+          ),
+
+          const Divider(),
+
+          ListTile(
+            leading: const Icon(Icons.password),
+            title: Text(l10n.changePassword),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ChangePasswordScreen(),
+                ),
+              );
+            },
           ),
         ],
       ),

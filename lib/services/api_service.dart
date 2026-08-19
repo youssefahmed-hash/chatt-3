@@ -177,6 +177,20 @@ class ApiService {
     return _decode(res) as Map<String, dynamic>;
   }
 
+  /// Change the current user's password (verifies the current password
+  /// server-side first).
+  static Future<Map<String, dynamic>> changePassword(String currentPassword, String newPassword) async {
+    final res = await http.post(
+      _uri('/auth/change-password'),
+      headers: _headers,
+      body: jsonEncode({
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      }),
+    );
+    return _decode(res) as Map<String, dynamic>;
+  }
+
   // ===== Users =====
 
   /// Other users you can start a chat with.

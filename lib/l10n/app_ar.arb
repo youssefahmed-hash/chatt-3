@@ -87,6 +87,8 @@
   "currentPassword": "كلمة المرور الحالية",
   "newPassword": "كلمة المرور الجديدة",
   "confirmNewPassword": "تأكيد كلمة المرور الجديدة",
+  "show": "إظهار",
+  "hide": "إخفاء",
   "passwordMismatch": "كلمتا المرور غير متطابقتين.",
   "passwordTooShort": "كلمة المرور يجب أن تكون 6 أحرف على الأقل.",
   "passwordRequired": "كلمة المرور مطلوبة.",

@@ -92,6 +92,8 @@
   "currentPassword": "Current Password",
   "newPassword": "New Password",
   "confirmNewPassword": "Confirm New Password",
+  "show": "Show",
+  "hide": "Hide",
   "passwordMismatch": "Passwords do not match.",
   "passwordTooShort": "Password must be at least 6 characters.",
   "passwordRequired": "Password is required.",

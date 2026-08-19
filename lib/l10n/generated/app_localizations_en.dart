@@ -260,6 +260,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get confirmNewPassword => 'Confirm New Password';
 
   @override
+  String get show => 'Show';
+
+  @override
+  String get hide => 'Hide';
+
+  @override
   String get passwordMismatch => 'Passwords do not match.';
 
   @override
