@@ -6,6 +6,12 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
     <string>Need microphone for voice messages</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Need camera access to take photos and videos</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Need photo library access to select photos and videos</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Need photo library access to save photos and videos</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -55,6 +61,13 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>This app needs notification access to notify you of new messages.</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
